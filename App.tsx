@@ -1,89 +1,191 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppState, WordCard, QuizQuestion, StudyMode, TestResult, Reward } from './types';
 import { initAudio, speakMessage, generateQuizOffline } from './services/geminiService';
 import { WORD_BANK } from './constants/wordBank';
-import { CAT_MESSAGES, getSpecialDayMessage } from './constants/catMessages';
 import Navigation from './components/Navigation.tsx';
 
-// 報酬の定義
+// 🎵 BGMのファイルパス。public/assets/bgm.mp3 を用意してください
+const BGM_URL = 'assets/bgm.mp3'; 
+
 const REWARDS: (Reward & { type: string; aura: string; color: string })[] = [
   { id: 'r1', name: 'ひのたま', cost: 50, emoji: '🔥', type: 'fire', aura: 'from-orange-400 to-rose-500', color: '#ffeadb', description: 'やる気がメラメラだニャ！' },
   { id: 'r2', name: 'リボンたま', cost: 100, emoji: '🎀', type: 'ribbon', aura: 'from-pink-300 to-rose-400', color: '#fff0f5', description: 'おしゃれ番長だニャ。' },
   { id: 'r3', name: 'おすしたま', cost: 150, emoji: '🍣', type: 'sushi', aura: 'from-slate-100 to-rose-50', color: '#ffffff', description: '鮮度バツグンの正解ニャ。' },
   { id: 'r4', name: 'ドヤ・メガネたま', cost: 200, emoji: '👓', type: 'glasses', aura: 'from-indigo-400 to-blue-600', color: '#eef2ff', description: '全知全能の風格だニャ。' },
   { id: 'r5', name: 'あめふりたま', cost: 300, emoji: '☔', type: 'rain', aura: 'from-cyan-300 to-blue-500', color: '#e0f7fa', description: '雨音は英語の調べだニャ。' },
-  { id: 'r6', name: 'たんていたま', cost: 400, emoji: '🔍', type: 'detective', aura: 'from-amber-600 to-amber-900', color: '#fef3c7', description: '真実は英語の中に…ニャ！' },
-  { id: 'r7', name: 'てんしたま', cost: 500, emoji: '👼', type: 'angel', aura: 'from-yellow-100 to-sky-100', color: '#fffbeb', description: 'きみの努力を導くニャ。' },
   { id: 'r12', name: '王様たま', cost: 1000, emoji: '👑', type: 'king', aura: 'from-amber-400 to-orange-600', color: '#fff9db', description: '英語界のレジェンドだニャ。' },
 ];
 
+/**
+ * サウンドシステムカスタムフック
+ * ブラウザの音声制限を回避し、MP3とSEを管理
+ */
+const useSoundSystem = () => {
+  const audioCtx = useRef<AudioContext | null>(null);
+  const bgmSource = useRef<AudioBufferSourceNode | null>(null);
+  const bgmBuffer = useRef<AudioBuffer | null>(null);
+  const bgmGainNode = useRef<GainNode | null>(null);
+  const [isBGMActive, setIsBGMActive] = useState(false);
+  const [isLoadingBGM, setIsLoadingBGM] = useState(false);
+
+  // 重要: ユーザー操作(クリック)の中でこれを呼ぶ必要がある
+  const initContext = async () => {
+    if (!audioCtx.current) {
+      audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.current.state === 'suspended') {
+      await audioCtx.current.resume();
+    }
+    return audioCtx.current;
+  };
+
+  const loadBGM = async () => {
+    if (bgmBuffer.current) return;
+    setIsLoadingBGM(true);
+    try {
+      const ctx = await initContext();
+      const response = await fetch(BGM_URL);
+      if (!response.ok) throw new Error('BGM file not found');
+      const arrayBuffer = await response.arrayBuffer();
+      bgmBuffer.current = await ctx.decodeAudioData(arrayBuffer);
+    } catch (err) {
+      console.warn('BGMロード失敗。ファイルを確認してください:', err);
+    } finally {
+      setIsLoadingBGM(false);
+    }
+  };
+
+  const startBGM = async () => {
+    const ctx = await initContext();
+    if (!bgmBuffer.current) {
+      await loadBGM();
+    }
+    if (!bgmBuffer.current || isBGMActive) return;
+
+    if (bgmSource.current) {
+      try { bgmSource.current.stop(); } catch(e) {}
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = bgmBuffer.current;
+    source.loop = true;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 1.2); 
+
+    source.connect(gain);
+    gain.connect(ctx.destination);
+
+    source.start(0);
+    bgmSource.current = source;
+    bgmGainNode.current = gain;
+    setIsBGMActive(true);
+  };
+
+  const stopBGM = () => {
+    if (bgmGainNode.current && audioCtx.current) {
+      const ctx = audioCtx.current;
+      bgmGainNode.current.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+      setTimeout(() => {
+        if (bgmSource.current) {
+          try { bgmSource.current.stop(); } catch(e) {}
+          bgmSource.current = null;
+        }
+        setIsBGMActive(false);
+      }, 500);
+    } else {
+      setIsBGMActive(false);
+    }
+  };
+
+  const playSE = async (type: 'click' | 'correct' | 'wrong' | 'point') => {
+    try {
+      const ctx = await initContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+
+      if (type === 'click') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(); osc.stop(now + 0.1);
+      } else if (type === 'correct') {
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(freq, now + i * 0.08);
+          g.gain.setValueAtTime(0.06, now + i * 0.08);
+          g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.5);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(now + i * 0.08); o.stop(now + i * 0.08 + 0.5);
+        });
+      } else if (type === 'wrong') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.linearRampToValueAtTime(110, now + 0.3);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(); osc.stop(now + 0.3);
+      } else if (type === 'point') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1174.66, now);
+        osc.frequency.exponentialRampToValueAtTime(2349.32, now + 0.15);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.start(); osc.stop(now + 0.3);
+      }
+    } catch (e) { console.error("SE再生エラー:", e); }
+  };
+
+  return { playSE, startBGM, stopBGM, isBGMActive, isLoadingBGM, initContext };
+};
+
 const TamaRenderer: React.FC<{ type?: string; scale?: number; emotion?: 'happy' | 'proud' | 'normal' | 'sad'; color?: string }> = ({ type = 'normal', scale = 1, emotion = 'normal', color = '#ffffff' }) => {
   return (
-    <div className="relative inline-block" style={{ transform: `scale(${scale})`, width: '220px', height: '220px' }}>
-      {/* 床の影 */}
-      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-36 h-6 bg-black/5 rounded-[100%] blur-xl"></div>
-      
-      {/* しっぽ：ぽてっとした猫のしっぽ */}
-      <div className="absolute bottom-10 -right-2 w-10 h-20 border-[14px] border-[#f0f0f0] rounded-[40%] border-t-transparent border-l-transparent rotate-[25deg] animate-tail origin-bottom-left" style={{ borderColor: `transparent transparent ${color} ${color}` }}></div>
-
-      {/* メインボディ：より「おもち」に近いぽてっとしたフォルム */}
-      <div className="absolute inset-2 rounded-[55%_45%_42%_42%] shadow-[inset_-10px_-15px_30px_rgba(0,0,0,0.03),0_15px_40px_rgba(0,0,0,0.04)] border-2 border-white/90 overflow-hidden transition-colors duration-500" style={{ backgroundColor: color }}>
-        <div className="absolute bottom-[-15%] left-1/2 -translate-x-1/2 w-48 h-40 bg-white/50 rounded-full blur-3xl"></div>
+    <div className="relative inline-block" style={{ transform: `scale(${scale})`, width: '150px', height: '150px' }}>
+      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-24 h-2 bg-black/5 rounded-full blur-md"></div>
+      <div className="absolute bottom-5 -right-1 w-6 h-12 border-[8px] border-[#eee] rounded-full border-t-transparent border-l-transparent rotate-[25deg] animate-tail origin-bottom-left" style={{ borderColor: `transparent transparent ${color} ${color}` }}></div>
+      <div className="absolute inset-0 rounded-[55%_55%_45%_45%] shadow-sm border-2 border-white transition-colors duration-500 overflow-hidden" style={{ backgroundColor: color }}>
+        <div className="absolute bottom-[-20%] left-1/2 -translate-x-1/2 w-32 h-24 bg-white/20 rounded-full blur-2xl"></div>
       </div>
-      
-      {/* 耳：さらにまるっこい猫耳 */}
-      <div className="absolute top-1 left-7 w-16 h-16 bg-white rounded-[70%_30%_30%_30%] -rotate-[22deg] shadow-sm border-t border-white/50" style={{ backgroundColor: color }}>
-        <div className="absolute inset-4 bg-rose-50 rounded-[60%_20%_20%_20%]"></div>
+      <div className="absolute -top-1 left-4 w-10 h-10 bg-white rounded-[70%_30%_30%_30%] -rotate-[28deg] shadow-sm border-t border-white" style={{ backgroundColor: color }}>
+        <div className="absolute inset-2 bg-rose-50 rounded-[60%_20%_20%_20%]"></div>
       </div>
-      <div className="absolute top-1 right-7 w-16 h-16 bg-white rounded-[30%_70%_30%_30%] rotate-[22deg] shadow-sm border-t border-white/50" style={{ backgroundColor: color }}>
-        <div className="absolute inset-4 bg-rose-50 rounded-[20%_60%_20%_20%]"></div>
+      <div className="absolute -top-1 right-4 w-10 h-10 bg-white rounded-[30%_70%_30%_30%] rotate-[28deg] shadow-sm border-t border-white" style={{ backgroundColor: color }}>
+        <div className="absolute inset-2 bg-rose-50 rounded-[20%_60%_20%_20%]"></div>
       </div>
-
-      {/* 顔：ゆるキャラパーツ配置 */}
-      <div className="absolute top-[48%] left-1/2 -translate-x-1/2 w-full px-14 flex flex-col items-center z-10">
-        <div className="flex justify-between w-full mb-2">
-          {/* 目：離して配置 */}
-          <div className={`w-3 h-3 bg-[#444] rounded-full relative ${emotion === 'happy' ? 'h-1.5 mt-1 rounded-t-full bg-transparent border-t-[3px] border-[#444]' : emotion === 'sad' ? 'h-1.5 mt-2 border-b-[3px] border-[#444] bg-transparent' : ''}`}>
-             {emotion === 'normal' && <div className="absolute top-0.5 right-0.5 w-0.5 h-0.5 bg-white rounded-full"></div>}
-          </div>
-          <div className={`w-3 h-3 bg-[#444] rounded-full relative ${emotion === 'happy' ? 'h-1.5 mt-1 rounded-t-full bg-transparent border-t-[3px] border-[#444]' : emotion === 'sad' ? 'h-1.5 mt-2 border-b-[3px] border-[#444] bg-transparent' : ''}`}>
-             {emotion === 'normal' && <div className="absolute top-0.5 left-0.5 w-0.5 h-0.5 bg-white rounded-full"></div>}
-          </div>
+      <div className="absolute top-[50%] left-1/2 -translate-x-1/2 w-full px-8 flex flex-col items-center z-10">
+        <div className="flex justify-between w-full mb-1">
+          <div className={`w-2 h-2 bg-[#444] rounded-full animate-blink ${emotion === 'happy' ? 'h-0.5 mt-1 border-t-[2px] border-[#444] bg-transparent' : emotion === 'sad' ? 'h-0.5 mt-1 border-b-[2px] border-[#444] bg-transparent' : ''}`}></div>
+          <div className={`w-2 h-2 bg-[#444] rounded-full animate-blink ${emotion === 'happy' ? 'h-0.5 mt-1 border-t-[2px] border-[#444] bg-transparent' : emotion === 'sad' ? 'h-0.5 mt-1 border-b-[2px] border-[#444] bg-transparent' : ''}`}></div>
         </div>
-        
-        {/* 口元：ふっくら ω */}
-        <div className="flex -mt-0.5 scale-125">
-          <div className="w-4 h-4 border-b-[2.5px] border-[#444] rounded-full -mr-[1px] opacity-60"></div>
-          <div className="w-4 h-4 border-b-[2.5px] border-[#444] rounded-full opacity-60"></div>
+        <div className="flex -mt-1 scale-110">
+          <div className="w-3 h-3 border-b-[1.5px] border-[#444] rounded-full -mr-[0.2px] opacity-70"></div>
+          <div className="w-3 h-3 border-b-[1.5px] border-[#444] rounded-full opacity-70"></div>
         </div>
-
-        {/* ほんのりチーク */}
-        <div className="absolute top-6 -left-1 w-6 h-4 bg-pink-200/40 rounded-full blur-[3px]"></div>
-        <div className="absolute top-6 -right-1 w-6 h-4 bg-pink-200/40 rounded-full blur-[3px]"></div>
       </div>
-
-      {/* もちもちの手 */}
-      <div className="absolute bottom-12 left-12 w-6 h-6 bg-white rounded-full border-b-[2px] border-zinc-50 shadow-sm z-10" style={{ backgroundColor: color }}></div>
-      <div className="absolute bottom-12 right-12 w-6 h-6 bg-white rounded-full border-b-[2px] border-zinc-50 shadow-sm z-10" style={{ backgroundColor: color }}></div>
-
-      {/* ごほうびアイテム */}
+      <div className="absolute bottom-8 left-8 w-3.5 h-3.5 bg-white rounded-full shadow-sm z-10 animate-paw-l" style={{ backgroundColor: color }}></div>
+      <div className="absolute bottom-8 right-8 w-3.5 h-3.5 bg-white rounded-full shadow-sm z-10 animate-paw-r" style={{ backgroundColor: color }}></div>
       {type === 'glasses' && (
-        <div className="absolute inset-0 z-20 pointer-events-none">
-          <div className="absolute top-[44%] left-1/2 -translate-x-1/2 w-full flex justify-center items-center gap-0.5">
-            <div className="w-12 h-12 border-[3px] border-[#333] rounded-full bg-blue-50/20 backdrop-blur-[1px]"></div>
-            <div className="w-3 h-[2px] bg-[#333] mt-2"></div>
-            <div className="w-12 h-12 border-[3px] border-[#333] rounded-full bg-blue-50/20 backdrop-blur-[1px]"></div>
+        <div className="absolute inset-0 z-20 flex justify-center items-center pointer-events-none">
+          <div className="mt-[-15px] flex items-center">
+            <div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div>
+            <div className="w-1.5 h-[1.5px] bg-[#333]"></div>
+            <div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div>
           </div>
         </div>
       )}
-      {type === 'fire' && <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-5xl animate-bounce">🔥</div>}
-      {type === 'ribbon' && <div className="absolute top-1 right-6 w-10 h-10 bg-rose-400 rounded-full shadow-lg flex items-center justify-center text-2xl rotate-12 border-2 border-white">🎀</div>}
-      {type === 'sushi' && <div className="absolute -bottom-2 right-6 w-16 h-10 bg-white rounded-full shadow-md border-2 border-orange-50 flex items-center justify-center text-3xl">🍣</div>}
-      {type === 'rain' && <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-7xl opacity-90 drop-shadow-md">☔</div>}
-      {type === 'king' && <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-7xl animate-pulse drop-shadow-lg">👑</div>}
-      {type === 'detective' && <div className="absolute -top-3 left-8 w-24 h-8 bg-amber-900 rounded-t-[50%] border-b-[4px] border-amber-950 -rotate-2"></div>}
-      {type === 'angel' && <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-20 h-4 bg-yellow-100/80 rounded-full border border-yellow-200"></div>}
+      {type === 'fire' && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-3xl animate-bounce">🔥</div>}
+      {type === 'ribbon' && <div className="absolute top-0 right-3 w-6 h-6 bg-rose-400 rounded-full flex items-center justify-center text-base rotate-12 border-2 border-white shadow-sm">🎀</div>}
+      {type === 'king' && <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-4xl animate-pulse">👑</div>}
     </div>
   );
 };
@@ -94,7 +196,7 @@ const App: React.FC = () => {
   const [loginId, setLoginId] = useState('');
   const [nickname, setNickname] = useState('');
   const [isFirstLogin, setIsFirstLogin] = useState(false);
-  const [characterMessage, setCharacterMessage] = useState('こんにちは！一緒に学ぼうニャ！');
+  const [characterMessage, setCharacterMessage] = useState('たま、応援してるニャ！');
   const [selectedStage, setSelectedStage] = useState<number>(1);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
@@ -104,7 +206,10 @@ const App: React.FC = () => {
   const [currentMissionStage, setCurrentMissionStage] = useState(1);
   const [studyMode, setStudyMode] = useState<StudyMode>('EN_TO_JP');
 
+  const { playSE, startBGM, stopBGM, isBGMActive, isLoadingBGM, initContext } = useSoundSystem();
+
   useEffect(() => {
+    // 最初のマウント時に音声ブラウザ初期化（ダミー）
     initAudio();
     const savedHistory = localStorage.getItem('eigo_kyun_history');
     if (savedHistory) {
@@ -113,7 +218,7 @@ const App: React.FC = () => {
       const maxCleared = history
         .filter((h: TestResult) => h.score >= 8)
         .map((h: TestResult) => parseInt(h.category.replace('Stage ', '')))
-        .reduce((max: number, current: number) => Math.max(max, current), 0);
+        .reduce((max: number, curr: number) => Math.max(max, curr), 0);
       setCurrentMissionStage(maxCleared + 1);
     }
   }, []);
@@ -125,24 +230,40 @@ const App: React.FC = () => {
     localStorage.setItem('eigo_kyun_all_users', JSON.stringify(allUsers));
   };
 
-  const buyReward = (reward: Reward) => {
-    if (!user) return;
-    if (user.points < reward.cost) {
-      setCharacterMessage('ポイントが足りないニャ…頑張るニャ！');
-      return;
+  const navTo = (page: AppState) => {
+    playSE('click');
+    setCurrentPage(page);
+  };
+
+  const handleLogin = async () => {
+    // ここでユーザー操作に反応してAudioContextを起動させる（重要！）
+    await initContext();
+    playSE('click');
+    
+    const allUsers = JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}');
+    if (isFirstLogin) {
+      if (!nickname) return;
+      const newUser: UserProfile = { id: loginId, nickname, points: 200, totalPoints: 200, loginDays: 1, lastLoginDate: new Date().toISOString().split('T')[0], unlockedRewards: [] };
+      saveUserData(newUser);
+      setCurrentPage('HOME');
+      startBGM(); 
+    } else if (allUsers[loginId]) {
+      setUser(allUsers[loginId]);
+      setCurrentPage('HOME');
+      startBGM();
+    } else {
+      setIsFirstLogin(true);
     }
-    const updatedUser: UserProfile = {
-      ...user,
-      points: user.points - reward.cost,
-      unlockedRewards: [...user.unlockedRewards, reward.id]
-    };
-    saveUserData(updatedUser);
-    setCharacterMessage(`${reward.name}、似合ってるかニャ？`);
   };
 
   const startQuiz = (mode: StudyMode) => {
-    const sWords = WORD_BANK.slice((selectedStage-1)*50, (selectedStage-1)*50 + 10);
-    const quiz = generateQuizOffline(sWords, mode, WORD_BANK);
+    playSE('click');
+    const stageStartIndex = (selectedStage - 1) * 50;
+    const stageWords = WORD_BANK.slice(stageStartIndex, stageStartIndex + 50);
+    const shuffledStage = [...stageWords].sort(() => Math.random() - 0.5);
+    const selectedWords = shuffledStage.slice(0, 10);
+    
+    const quiz = generateQuizOffline(selectedWords, mode, WORD_BANK);
     setQuizQuestions(quiz);
     setCurrentQuizIdx(0);
     setCorrectCount(0);
@@ -155,28 +276,15 @@ const App: React.FC = () => {
     switch (currentPage) {
       case 'LOGIN':
         return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#fdfaf9] page-enter overflow-hidden">
-            <div className="w-full max-w-sm text-center relative">
-              <div className="mb-8 scale-110"><TamaRenderer scale={1.2} emotion="happy" /></div>
-              <h1 className="text-4xl font-black text-zinc-800 mb-1 tracking-tighter italic">Eigo★Kyun!</h1>
-              <p className="text-[10px] font-black text-pink-300 uppercase tracking-[0.4em] mb-12">もちもち英単語ラボ</p>
-              <div className="space-y-4">
-                <input type="text" inputMode="numeric" placeholder="8桁のID" maxLength={8} className="w-full bg-white border-2 border-zinc-50 p-5 rounded-[2.5rem] text-center text-xl font-bold outline-none focus:border-pink-200 transition-all shadow-sm" value={loginId} onChange={e => setLoginId(e.target.value.replace(/\D/g, ''))} />
-                {isFirstLogin && <input type="text" placeholder="なまえを教えてニャ" className="w-full bg-white border-2 border-zinc-50 p-5 rounded-[2.5rem] text-center text-lg font-bold outline-none focus:border-blue-200 shadow-sm" value={nickname} onChange={e => setNickname(e.target.value)} />}
-                <button onClick={() => {
-                  const allUsers = JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}');
-                  if (isFirstLogin) {
-                    if (!nickname) return;
-                    const newUser: UserProfile = { id: loginId, nickname, points: 200, totalPoints: 200, loginDays: 1, lastLoginDate: new Date().toISOString().split('T')[0], unlockedRewards: [] };
-                    saveUserData(newUser);
-                    setCurrentPage('HOME');
-                  } else if (allUsers[loginId]) {
-                    setUser(allUsers[loginId]);
-                    setCurrentPage('HOME');
-                  } else {
-                    setIsFirstLogin(true);
-                  }
-                }} className="w-full bg-zinc-800 text-white py-5 rounded-[2.5rem] font-black text-xl shadow-lg active:scale-95 transition-all">はじめる！</button>
+          <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#fdfaf9] page-enter">
+            <div className="w-full max-w-xs text-center">
+              <div className="mb-4"><TamaRenderer scale={1.1} emotion="happy" /></div>
+              <h1 className="text-4xl font-black text-zinc-800 mb-1 italic tracking-tighter">Eigo★Kyun!</h1>
+              <p className="text-[9px] font-black text-pink-300 tracking-[0.4em] mb-10 text-center">DAILY ENGLISH MAGIC</p>
+              <div className="space-y-3">
+                <input type="text" inputMode="numeric" placeholder="8桁のID" maxLength={8} className="w-full bg-white border-2 border-zinc-50 p-4 rounded-3xl text-center text-xl font-bold focus:border-pink-200 outline-none shadow-sm transition-all" value={loginId} onChange={e => setLoginId(e.target.value.replace(/\D/g, ''))} />
+                {isFirstLogin && <input type="text" placeholder="なまえを教えてニャ" className="w-full bg-white border-2 border-zinc-50 p-4 rounded-3xl text-center font-bold focus:border-pink-200 outline-none shadow-sm transition-all" value={nickname} onChange={e => setNickname(e.target.value)} />}
+                <button onClick={handleLogin} className="w-full bg-zinc-800 text-white py-4 rounded-3xl font-black text-lg shadow-lg active:scale-95 transition-all">はじめる！</button>
               </div>
             </div>
           </div>
@@ -184,36 +292,36 @@ const App: React.FC = () => {
       case 'HOME':
         const curReward = user?.unlockedRewards.length ? REWARDS.find(r => r.id === user.unlockedRewards[user.unlockedRewards.length - 1]) : null;
         return (
-          <div className="p-8 pt-10 space-y-12 page-enter pb-32">
+          <div className="p-6 pt-10 space-y-10 page-enter pb-32 text-center">
             <div className="flex flex-col items-center">
-               <div className="floating-slow mb-8"><TamaRenderer type={curReward?.type} color={curReward?.color} scale={1.7} emotion="happy" /></div>
-               <div className="glass p-7 rounded-[3rem] border border-white/60 shadow-xl max-w-[280px] w-full relative">
-                 <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-white/80 border-l border-t border-zinc-50 rotate-45"></div>
-                 <p className="text-zinc-700 font-bold text-lg text-center leading-relaxed italic">"{characterMessage}"</p>
+               <div className="floating-slow mb-4"><TamaRenderer type={curReward?.type} color={curReward?.color} scale={1.3} emotion="happy" /></div>
+               <div className="glass p-5 rounded-[2rem] border border-white/60 shadow-lg max-w-[210px] w-full relative">
+                 <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white/80 border-l border-t border-zinc-50 rotate-45"></div>
+                 <p className="text-zinc-600 font-bold text-center text-xs leading-snug">"{characterMessage}"</p>
                </div>
             </div>
-            <div className="grid grid-cols-2 gap-5">
-               <button onClick={() => setCurrentPage('LEARN')} className="bg-white p-8 rounded-[3rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 active:scale-95 transition-all">
-                 <span className="text-4xl">🍙</span><span className="text-[10px] font-black text-zinc-400 tracking-widest uppercase">Learn</span>
+            <div className="grid grid-cols-2 gap-4">
+               <button onClick={() => navTo('LEARN')} className="bg-white p-6 rounded-[1.8rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-1 active:scale-95 transition-all">
+                 <span className="text-3xl">🐾</span><span className="text-[9px] font-black text-zinc-400 tracking-widest uppercase">Learn</span>
                </button>
-               <button onClick={() => setCurrentPage('SHOP')} className="bg-white p-8 rounded-[3rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 active:scale-95 transition-all">
-                 <span className="text-4xl">🎀</span><span className="text-[10px] font-black text-zinc-400 tracking-widest uppercase">Shop</span>
+               <button onClick={() => navTo('SHOP')} className="bg-white p-6 rounded-[1.8rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-1 active:scale-95 transition-all">
+                 <span className="text-3xl">🎀</span><span className="text-[9px] font-black text-zinc-400 tracking-widest uppercase">Shop</span>
                </button>
             </div>
           </div>
         );
       case 'LEARN':
         return (
-          <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-800 tracking-tighter italic">World Map</h2>
-            <div className="grid grid-cols-2 gap-6">
+          <div className="p-6 pt-10 space-y-8 page-enter pb-32">
+            <h2 className="text-3xl font-black text-zinc-800 italic">Stages</h2>
+            <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 12 }).map((_, i) => {
                 const s = i + 1;
                 const isLocked = s > currentMissionStage;
                 return (
-                  <button key={s} disabled={isLocked} onClick={() => { setSelectedStage(s); setCurrentPage('TEST'); }} className={`p-8 rounded-[3rem] shadow-sm border-2 transition-all flex flex-col items-center gap-4 ${isLocked ? 'bg-zinc-50 border-zinc-100 opacity-30' : s === currentMissionStage ? 'bg-white border-pink-300 scale-105 z-10 shadow-lg' : 'bg-white border-white active:scale-95'}`}>
-                    <div className="text-5xl">{isLocked ? '🔒' : s < currentMissionStage ? '👑' : '🐾'}</div>
-                    <p className="text-3xl font-black text-zinc-700 tracking-tighter">{s}</p>
+                  <button key={s} disabled={isLocked} onClick={() => { setSelectedStage(s); navTo('TEST'); }} className={`p-5 rounded-[1.5rem] shadow-sm border-2 transition-all flex flex-col items-center gap-2 ${isLocked ? 'bg-zinc-50 border-zinc-100 opacity-20' : s === currentMissionStage ? 'bg-white border-pink-200 scale-102 shadow-md' : 'bg-white border-white active:scale-95'}`}>
+                    <div className="text-3xl">{isLocked ? '🔒' : s < currentMissionStage ? '🏅' : '🐱'}</div>
+                    <p className="text-xl font-black text-zinc-700">Stage {s}</p>
                   </button>
                 );
               })}
@@ -221,28 +329,25 @@ const App: React.FC = () => {
           </div>
         );
       case 'TEST':
-        const sWords = WORD_BANK.slice((selectedStage-1)*50, (selectedStage-1)*50 + 10);
+        const stageWords = WORD_BANK.slice((selectedStage-1)*50, (selectedStage-1)*50 + 50);
         return (
-          <div className="p-8 pt-12 space-y-8 page-enter pb-32">
-            <div className="flex items-center justify-between">
-              <button onClick={() => setCurrentPage('LEARN')} className="text-zinc-400 font-black text-[10px] tracking-widest bg-white px-6 py-2 rounded-full border border-zinc-50 shadow-sm">MAP</button>
-              <h2 className="text-2xl font-black text-zinc-800 tracking-tight">Stage {selectedStage}</h2>
+          <div className="p-6 pt-10 space-y-4 page-enter pb-32 overflow-hidden">
+            <div className="flex items-center justify-between mb-2">
+              <button onClick={() => navTo('LEARN')} className="text-zinc-400 font-black text-[8px] tracking-widest bg-white px-4 py-1.5 rounded-full border border-zinc-50 shadow-sm">BACK</button>
+              <h2 className="text-lg font-black text-zinc-800 italic">Stage {selectedStage}</h2>
             </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => startQuiz('EN_TO_JP')} className="bg-pink-400 text-white py-6 rounded-[2rem] font-black text-lg shadow-md active:scale-95 transition-all">英和テスト</button>
-              <button onClick={() => startQuiz('JP_TO_EN')} className="bg-zinc-800 text-white py-6 rounded-[2rem] font-black text-lg shadow-md active:scale-95 transition-all">和英テスト</button>
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <button onClick={() => startQuiz('EN_TO_JP')} className="bg-pink-400 text-white py-4 rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all">英和クイズ</button>
+              <button onClick={() => startQuiz('JP_TO_EN')} className="bg-zinc-800 text-white py-4 rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all">和英クイズ</button>
             </div>
-
-            <div className="space-y-4">
-              <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest px-4">Word List</p>
-              {sWords.map(w => (
-                <div key={w.id} className="bg-white p-7 rounded-[2.5rem] flex items-center justify-between shadow-sm border border-zinc-50">
-                  <div>
-                    <p className="text-2xl font-black text-zinc-700 tracking-tight">{w.word}</p>
-                    <p className="text-xs font-bold text-zinc-300 italic">{w.meaning}</p>
+            <div className="space-y-1.5 overflow-y-auto max-h-[55vh] pr-1">
+              {stageWords.map(w => (
+                <div key={w.id} className="bg-white px-4 py-3 rounded-xl flex items-center justify-between shadow-sm border border-zinc-50">
+                  <div className="flex-1">
+                    <p className="text-base font-black text-zinc-700 leading-none mb-0.5">{w.word}</p>
+                    <p className="text-[9px] font-bold text-zinc-300 italic">{w.meaning}</p>
                   </div>
-                  <button onClick={() => { speakMessage(w.word); }} className="bg-zinc-50 p-4 rounded-[1.5rem] text-xl active:bg-pink-100 transition-colors">🔊</button>
+                  <button onClick={() => { playSE('click'); speakMessage(w.word); }} className="bg-zinc-50 p-2 rounded-lg text-sm active:bg-pink-50">🔊</button>
                 </div>
               ))}
             </div>
@@ -252,37 +357,25 @@ const App: React.FC = () => {
         const q = quizQuestions[currentQuizIdx];
         const curRewardForQuiz = user?.unlockedRewards.length ? REWARDS.find(r => r.id === user.unlockedRewards[user.unlockedRewards.length - 1]) : null;
         return (
-          <div className="p-8 pt-10 min-h-screen page-enter bg-[#fdfaf9] flex flex-col items-center">
+          <div className="p-6 pt-2 min-h-screen page-enter bg-[#fdfaf9] flex flex-col items-center">
             {lastAnswerFeedback && (
               <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none animate-result-pop">
-                <span className={`text-[12rem] font-black drop-shadow-2xl ${lastAnswerFeedback === 'CORRECT' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                <span className={`text-9xl font-black drop-shadow-xl ${lastAnswerFeedback === 'CORRECT' ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {lastAnswerFeedback === 'CORRECT' ? '○' : '×'}
                 </span>
               </div>
             )}
-
-            <div className="mb-4 scale-75"><TamaRenderer type={curRewardForQuiz?.type} color={curRewardForQuiz?.color} scale={1.5} emotion={lastAnswerFeedback === 'WRONG' ? 'sad' : 'normal'} /></div>
-
-            <div className="w-full max-w-sm space-y-6">
-              <div className="text-center bg-white p-10 rounded-[3.5rem] border border-zinc-50 shadow-2xl relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[9px] px-6 py-2 rounded-full font-black tracking-widest">{currentQuizIdx + 1} / 10</div>
-                <h3 className="text-3xl font-black text-zinc-700 mt-4 tracking-tight leading-tight whitespace-pre-wrap">{q?.question}</h3>
+            <div className="mb-1"><TamaRenderer type={curRewardForQuiz?.type} color={curRewardForQuiz?.color} scale={0.8} emotion={lastAnswerFeedback === 'WRONG' ? 'sad' : 'normal'} /></div>
+            <div className="w-full max-w-sm space-y-3">
+              <div className="text-center bg-white p-5 rounded-[1.8rem] border border-zinc-50 shadow-md relative">
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[7px] px-3 py-1 rounded-full font-black tracking-widest">{currentQuizIdx + 1} / 10</div>
+                <h3 className="text-xl font-black text-zinc-700 mt-1 leading-tight">{q?.question}</h3>
               </div>
-
-              {lastAnswerFeedback === 'WRONG' && (
-                <div className="bg-zinc-800 text-white p-6 rounded-[2.5rem] shadow-xl animate-pop-in relative">
-                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-zinc-800 rotate-45"></div>
-                   <p className="text-center font-bold text-sm leading-relaxed tracking-tight">
-                    正解は「<span className="text-pink-300">{q.correctAnswer}</span>」だニャ！<br/>
-                    <span className="text-zinc-400 text-xs font-normal">{q.explanation}</span>
-                  </p>
-                </div>
-              )}
-
-              <div className="grid gap-3">
+              <div className="grid gap-2">
                 {q?.options.map((opt, i) => (
                   <button key={i} onClick={() => {
                     const isCorrect = opt === q.correctAnswer;
+                    playSE(isCorrect ? 'correct' : 'wrong');
                     setLastAnswerFeedback(isCorrect ? 'CORRECT' : 'WRONG');
                     if (isCorrect) setCorrectCount(c => c + 1);
                     setTimeout(() => {
@@ -293,11 +386,14 @@ const App: React.FC = () => {
                         const score = isCorrect ? correctCount + 1 : correctCount;
                         const res = { score, total: 10, date: new Date().toLocaleDateString(), timestamp: Date.now(), category: `Stage ${selectedStage}` };
                         setTestHistory(h => [res, ...h].slice(0, 30));
-                        if (user) saveUserData({ ...user, points: user.points + score * 10, totalPoints: user.totalPoints + score * 10 });
+                        if (user) {
+                          saveUserData({ ...user, points: user.points + score * 10, totalPoints: user.totalPoints + score * 10 });
+                          playSE('point');
+                        }
                         setCurrentPage('REVIEW');
                       }
-                    }, isCorrect ? 800 : 2500);
-                  }} disabled={!!lastAnswerFeedback} className={`bg-white p-6 rounded-[2.5rem] border-2 text-left font-black text-lg transition-all ${lastAnswerFeedback ? (opt === q.correctAnswer ? 'bg-emerald-50 border-emerald-200 scale-105' : 'opacity-20') : 'border-zinc-50 active:scale-95'}`}>
+                    }, isCorrect ? 600 : 1800);
+                  }} disabled={!!lastAnswerFeedback} className={`bg-white p-3.5 rounded-xl border-2 text-center font-black text-sm transition-all ${lastAnswerFeedback ? (opt === q.correctAnswer ? 'bg-emerald-50 border-emerald-200' : 'opacity-20') : 'border-zinc-50 active:scale-98'}`}>
                     {opt}
                   </button>
                 ))}
@@ -307,67 +403,75 @@ const App: React.FC = () => {
         );
       case 'SHOP':
         return (
-          <div className="p-8 pt-12 space-y-12 page-enter pb-48">
-             <div className="flex justify-between items-end">
-              <h2 className="text-4xl font-black text-zinc-800 italic tracking-tighter">Boutique</h2>
-              <div className="bg-pink-400 text-white px-6 py-3 rounded-full font-black text-lg shadow-md">{user?.points} <span className="text-[10px] opacity-60">PT</span></div>
+          <div className="p-6 pt-10 space-y-6 page-enter pb-48">
+             <div className="flex justify-between items-end px-2">
+              <h2 className="text-3xl font-black text-zinc-800 italic">Boutique</h2>
+              <div className="bg-pink-400 text-white px-4 py-1.5 rounded-full font-black text-xs shadow-sm">{user?.points} PT</div>
             </div>
-            <div className="grid grid-cols-1 gap-14">
+            <div className="grid grid-cols-1 gap-4">
               {REWARDS.map(r => {
                 const isUnlocked = user?.unlockedRewards.includes(r.id);
                 return (
-                  <div key={r.id} className={`bg-white p-12 rounded-[4.5rem] border-2 transition-all flex flex-col items-center text-center relative ${isUnlocked ? 'border-zinc-50 opacity-50' : 'border-white shadow-2xl'}`}>
-                    <div className="mb-10 relative">
-                       <div className={`absolute inset-0 ${r.aura} blur-[40px] rounded-full opacity-30`}></div>
-                       <TamaRenderer type={r.type} color={r.color} scale={1.2} />
+                  <div key={r.id} className={`bg-white p-5 rounded-2xl border-2 transition-all flex items-center justify-between relative ${isUnlocked ? 'border-zinc-50 opacity-40' : 'border-white shadow-md'}`}>
+                    <div className="flex items-center gap-3">
+                      <TamaRenderer type={r.type} color={r.color} scale={0.5} />
+                      <div className="text-left">
+                        <p className="text-base font-black text-zinc-800">{r.name}</p>
+                        <p className="text-[7px] font-bold text-zinc-400 italic">"{r.description}"</p>
+                      </div>
                     </div>
-                    <div className="space-y-2 mb-8 px-4">
-                      <p className="text-3xl font-black text-zinc-800">{r.name}</p>
-                      <p className="text-[10px] font-bold text-zinc-400 italic">"{r.description}"</p>
-                    </div>
-                    {isUnlocked ? <div className="text-zinc-200 font-black text-[10px] tracking-[0.3em]">COLLECTED</div> : <button onClick={() => buyReward(r)} className="w-full py-5 rounded-[2rem] font-black text-lg bg-zinc-800 text-white active:scale-95 transition-all">Unlock {r.cost}P</button>}
+                    {isUnlocked ? <div className="text-zinc-200 font-black text-[7px] tracking-widest mr-2">OWNED</div> : <button onClick={async () => {
+                      if (!user) return;
+                      if (user.points < r.cost) {
+                        playSE('wrong');
+                        return;
+                      }
+                      playSE('point');
+                      const updated = { ...user, points: user.points - r.cost, unlockedRewards: [...user.unlockedRewards, r.id] };
+                      saveUserData(updated);
+                      setCharacterMessage(`${r.name}、とっても可愛いニャ！`);
+                    }} className="bg-zinc-800 text-white px-4 py-2 rounded-xl font-black text-[9px] shadow-sm active:scale-95 transition-all">{r.cost}P</button>}
                   </div>
                 );
               })}
             </div>
           </div>
         );
-      case 'RANKING':
-        const allUsers = Object.values(JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}')).sort((a: any, b: any) => b.totalPoints - a.totalPoints).slice(0, 10);
+      case 'REVIEW':
         return (
-          <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-800 text-center italic tracking-tighter">Hall of Fame</h2>
-            <div className="space-y-5">
-              {allUsers.map((u: any, i) => (
-                <div key={u.id} className={`bg-white p-7 rounded-[3rem] flex items-center gap-6 border-2 ${u.id === user?.id ? 'border-pink-300 shadow-xl' : 'border-zinc-50 shadow-sm'}`}>
-                  <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center font-black text-xl ${i===0?'bg-yellow-400 text-white':i===1?'bg-zinc-200 text-zinc-400':i===2?'bg-orange-300 text-white':'bg-zinc-50 text-zinc-200'}`}>{i+1}</div>
-                  <div className="flex-1">
-                    <p className="text-xl font-black text-zinc-700">{u.nickname}</p>
-                    <p className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">{u.loginDays} Days Streak</p>
+          <div className="p-6 pt-10 space-y-6 page-enter pb-32">
+            <h2 className="text-3xl font-black text-zinc-800 italic text-center">Summary</h2>
+            <div className="bg-zinc-800 p-6 rounded-3xl text-center shadow-lg">
+              <p className="text-[7px] font-black text-pink-300 uppercase tracking-widest mb-1 opacity-80">Accumulated Points</p>
+              <p className="text-4xl font-black text-white">{user?.points}<span className="text-[10px] ml-1 text-zinc-500">PT</span></p>
+            </div>
+            <div className="space-y-2">
+              {testHistory.slice(0, 5).map((h, i) => (
+                <div key={i} className="bg-white p-4 rounded-xl flex justify-between items-center shadow-sm border-l-4 border-l-pink-300">
+                  <div>
+                    <span className="text-[7px] font-black text-zinc-300 uppercase leading-none">{h.category}</span>
+                    <p className="text-[10px] font-bold text-zinc-700 leading-none mt-1">{h.date}</p>
                   </div>
-                  <p className="text-2xl font-black text-pink-400 tracking-tighter">{u.totalPoints}</p>
+                  <p className="text-xl font-black text-zinc-800 leading-none">{h.score}<span className="text-[8px] text-zinc-200 ml-0.5">/10</span></p>
                 </div>
               ))}
             </div>
           </div>
         );
-      case 'REVIEW':
+      case 'RANKING':
+        const allUsersArr = Object.values(JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}')).sort((a: any, b: any) => b.totalPoints - a.totalPoints).slice(0, 10);
         return (
-          <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-800 italic tracking-tighter text-center">My Archive</h2>
-            <div className="bg-zinc-800 p-12 rounded-[4.5rem] text-center shadow-2xl relative overflow-hidden">
-              <p className="text-[10px] font-black text-pink-300 uppercase tracking-[0.4em] mb-4 opacity-80">Accumulated Points</p>
-              <p className="text-7xl font-black text-white tracking-tighter">{user?.points}<span className="text-xs font-bold ml-2 text-zinc-500">PT</span></p>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-zinc-300 uppercase tracking-widest px-6">Latest Records</h3>
-              {testHistory.slice(0, 5).map((h, i) => (
-                <div key={i} className="bg-white p-7 rounded-[2.5rem] flex justify-between items-center shadow-sm border-l-8 border-l-pink-300">
-                  <div>
-                    <span className="text-[9px] font-black text-zinc-300 uppercase">{h.category}</span>
-                    <p className="text-sm font-bold text-zinc-700">{h.date}</p>
+          <div className="p-6 pt-10 space-y-6 page-enter pb-32">
+            <h2 className="text-3xl font-black text-zinc-800 italic text-center">Hall of Fame</h2>
+            <div className="space-y-2.5">
+              {allUsersArr.map((u: any, i) => (
+                <div key={u.id} className={`bg-white p-3.5 rounded-2xl flex items-center gap-4 border-2 ${u.id === user?.id ? 'border-pink-300 shadow-md' : 'border-zinc-50'}`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${i===0?'bg-yellow-400 text-white':i===1?'bg-zinc-200 text-zinc-400':i===2?'bg-orange-300 text-white':'bg-zinc-50 text-zinc-200'}`}>{i+1}</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-black text-zinc-700">{u.nickname}</p>
+                    <p className="text-[7px] font-bold text-zinc-300 tracking-widest uppercase">{u.loginDays} Days</p>
                   </div>
-                  <p className="text-3xl font-black tracking-tighter text-zinc-800">{h.score}<span className="text-[10px] text-zinc-200 ml-1">/10</span></p>
+                  <p className="text-base font-black text-pink-400">{u.totalPoints}</p>
                 </div>
               ))}
             </div>
@@ -380,48 +484,67 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen relative bg-[#fdfaf9]">
       {currentPage !== 'LOGIN' && (
-        <header className="p-6 flex justify-between items-center sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-white shadow-sm">
-          <div className="flex items-center gap-4 cursor-pointer" onClick={() => setCurrentPage('HOME')}>
-            <div className="w-10 h-10 bg-zinc-800 rounded-[1.2rem] flex items-center justify-center text-xl shadow-lg">🐱</div>
-            <h1 className="text-[10px] font-black text-zinc-800 tracking-widest uppercase italic leading-none">Eigo★Ky!</h1>
+        <header className="p-4 flex justify-between items-center sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-white">
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navTo('HOME')}>
+            <div className="w-7 h-7 bg-zinc-800 rounded-lg flex items-center justify-center text-base shadow-md">🐱</div>
+            <h1 className="text-[7px] font-black text-zinc-800 tracking-widest uppercase italic leading-none">Eigo★Ky!</h1>
           </div>
-          <button onClick={() => setCurrentPage('RANKING')} className="bg-pink-400 px-6 py-2 rounded-full text-white font-black text-[9px] uppercase tracking-widest shadow-md active:scale-95 transition-all">Rank</button>
+          <div className="flex gap-1.5">
+            <button 
+              onClick={() => {
+                initContext(); // 操作時に再活性化
+                isBGMActive ? stopBGM() : startBGM();
+              }} 
+              disabled={isLoadingBGM}
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-sm transition-all ${isLoadingBGM ? 'opacity-50' : ''} ${isBGMActive ? 'bg-pink-100 text-pink-600 font-bold' : 'bg-zinc-100 text-zinc-400'}`}
+            >
+              {isLoadingBGM ? '⏳' : isBGMActive ? 'ON' : 'OFF'}
+            </button>
+            <button onClick={() => navTo('RANKING')} className="bg-pink-400 px-3 py-1 rounded-full text-white font-black text-[7px] uppercase tracking-widest shadow-sm">Rank</button>
+          </div>
         </header>
       )}
       <main className="max-w-md mx-auto">{renderContent()}</main>
-      {currentPage !== 'LOGIN' && <Navigation current={currentPage} setPage={setCurrentPage} />}
+      {currentPage !== 'LOGIN' && <Navigation current={currentPage} setPage={navTo} />}
       <style>{`
         .floating-slow { animation: float-slow 4s ease-in-out infinite; }
         @keyframes float-slow {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-15px); }
+          50% { transform: translateY(-8px); }
         }
         @keyframes tail {
           0%, 100% { transform: rotate(25deg); }
-          50% { transform: rotate(40deg); }
+          50% { transform: rotate(35deg); }
         }
-        .animate-tail { animation: tail 3s ease-in-out infinite; }
-        .page-enter { animation: fadeIn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+        @keyframes blink {
+          0%, 92%, 100% { transform: scaleY(1); }
+          96% { transform: scaleY(0.1); }
+        }
+        @keyframes pawL {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-1.5px) rotate(-8deg); }
+        }
+        @keyframes pawR {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-1.5px) rotate(8deg); }
+        }
+        .animate-tail { animation: tail 2s ease-in-out infinite; }
+        .animate-blink { animation: blink 3s infinite; }
+        .animate-paw-l { animation: pawL 3s ease-in-out infinite; }
+        .animate-paw-r { animation: pawR 3s ease-in-out infinite; delay: 0.15s; }
+        .page-enter { animation: fadeIn 0.25s ease-out forwards; }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
+          from { opacity: 0; transform: translateY(4px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        .animate-result-pop {
-          animation: resultPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
         @keyframes resultPop {
-          0% { transform: scale(0.4); opacity: 0; }
-          20% { transform: scale(1.1); opacity: 1; }
-          80% { transform: scale(1); opacity: 1; }
-          100% { transform: scale(1.4); opacity: 0; }
+          0% { transform: scale(0.6); opacity: 0; }
+          30% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.15); opacity: 0; }
         }
-        .animate-pop-in {
-          animation: popIn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-        }
-        @keyframes popIn {
-          from { transform: scale(0.9) translateY(10px); opacity: 0; }
-          to { transform: scale(1) translateY(0); opacity: 1; }
-        }
+        .animate-result-pop { animation: resultPop 0.7s ease-out forwards; }
+        .scale-102 { transform: scale(1.02); }
+        .scale-98 { transform: scale(0.98); }
       `}</style>
     </div>
   );
