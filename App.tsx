@@ -5,8 +5,8 @@ import { initAudio, speakMessage, generateQuizOffline } from './services/geminiS
 import { WORD_BANK } from './constants/wordBank';
 import Navigation from './components/Navigation.tsx';
 
-// 🎵 BGMのファイルパス。public/assets/bgm.mp3 を用意してください
-const BGM_URL = 'assets/bgm.mp3'; 
+// 🎵 BGMのURL。public/assets/bgm.mp3 を参照します（publicフォルダ名は必須です）
+const BGM_URL = '/assets/bgm.mp3'; 
 
 const REWARDS: (Reward & { type: string; aura: string; color: string })[] = [
   { id: 'r1', name: 'ひのたま', cost: 50, emoji: '🔥', type: 'fire', aura: 'from-orange-400 to-rose-500', color: '#ffeadb', description: 'やる気がメラメラだニャ！' },
@@ -17,10 +17,6 @@ const REWARDS: (Reward & { type: string; aura: string; color: string })[] = [
   { id: 'r12', name: '王様たま', cost: 1000, emoji: '👑', type: 'king', aura: 'from-amber-400 to-orange-600', color: '#fff9db', description: '英語界のレジェンドだニャ。' },
 ];
 
-/**
- * サウンドシステムカスタムフック
- * ブラウザの音声制限を回避し、MP3とSEを管理
- */
 const useSoundSystem = () => {
   const audioCtx = useRef<AudioContext | null>(null);
   const bgmSource = useRef<AudioBufferSourceNode | null>(null);
@@ -29,11 +25,12 @@ const useSoundSystem = () => {
   const [isBGMActive, setIsBGMActive] = useState(false);
   const [isLoadingBGM, setIsLoadingBGM] = useState(false);
 
-  // 重要: ユーザー操作(クリック)の中でこれを呼ぶ必要がある
+  // ブラウザの音声制限を解除する関数
   const initContext = async () => {
     if (!audioCtx.current) {
-      audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 44100 });
     }
+    // Safariなどで必要な再開処理
     if (audioCtx.current.state === 'suspended') {
       await audioCtx.current.resume();
     }
@@ -46,42 +43,46 @@ const useSoundSystem = () => {
     try {
       const ctx = await initContext();
       const response = await fetch(BGM_URL);
-      if (!response.ok) throw new Error('BGM file not found');
+      if (!response.ok) throw new Error('BGMファイルが見つかりません。public/assets/bgm.mp3 のフォルダ名を確認してください（pubilcではなくpublicです）');
       const arrayBuffer = await response.arrayBuffer();
       bgmBuffer.current = await ctx.decodeAudioData(arrayBuffer);
     } catch (err) {
-      console.warn('BGMロード失敗。ファイルを確認してください:', err);
+      console.warn('BGMロード失敗:', err);
     } finally {
       setIsLoadingBGM(false);
     }
   };
 
   const startBGM = async () => {
-    const ctx = await initContext();
-    if (!bgmBuffer.current) {
-      await loadBGM();
+    try {
+      const ctx = await initContext();
+      if (!bgmBuffer.current) {
+        await loadBGM();
+      }
+      if (!bgmBuffer.current || isBGMActive) return;
+
+      if (bgmSource.current) {
+        try { bgmSource.current.stop(); } catch(e) {}
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = bgmBuffer.current;
+      source.loop = true;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 1.2); 
+
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      source.start(0);
+      bgmSource.current = source;
+      bgmGainNode.current = gain;
+      setIsBGMActive(true);
+    } catch (e) {
+      console.error("BGM再生エラー:", e);
     }
-    if (!bgmBuffer.current || isBGMActive) return;
-
-    if (bgmSource.current) {
-      try { bgmSource.current.stop(); } catch(e) {}
-    }
-
-    const source = ctx.createBufferSource();
-    source.buffer = bgmBuffer.current;
-    source.loop = true;
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 1.2); 
-
-    source.connect(gain);
-    gain.connect(ctx.destination);
-
-    source.start(0);
-    bgmSource.current = source;
-    bgmGainNode.current = gain;
-    setIsBGMActive(true);
   };
 
   const stopBGM = () => {
@@ -142,7 +143,7 @@ const useSoundSystem = () => {
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
         osc.start(); osc.stop(now + 0.3);
       }
-    } catch (e) { console.error("SE再生エラー:", e); }
+    } catch (e) {}
   };
 
   return { playSE, startBGM, stopBGM, isBGMActive, isLoadingBGM, initContext };
@@ -174,15 +175,7 @@ const TamaRenderer: React.FC<{ type?: string; scale?: number; emotion?: 'happy' 
       </div>
       <div className="absolute bottom-8 left-8 w-3.5 h-3.5 bg-white rounded-full shadow-sm z-10 animate-paw-l" style={{ backgroundColor: color }}></div>
       <div className="absolute bottom-8 right-8 w-3.5 h-3.5 bg-white rounded-full shadow-sm z-10 animate-paw-r" style={{ backgroundColor: color }}></div>
-      {type === 'glasses' && (
-        <div className="absolute inset-0 z-20 flex justify-center items-center pointer-events-none">
-          <div className="mt-[-15px] flex items-center">
-            <div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div>
-            <div className="w-1.5 h-[1.5px] bg-[#333]"></div>
-            <div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div>
-          </div>
-        </div>
-      )}
+      {type === 'glasses' && <div className="absolute inset-0 z-20 flex justify-center items-center pointer-events-none"><div className="mt-[-15px] flex items-center"><div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div><div className="w-1.5 h-[1.5px] bg-[#333]"></div><div className="w-8 h-8 border-[1.5px] border-[#333] rounded-full bg-blue-50/10"></div></div></div>}
       {type === 'fire' && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-3xl animate-bounce">🔥</div>}
       {type === 'ribbon' && <div className="absolute top-0 right-3 w-6 h-6 bg-rose-400 rounded-full flex items-center justify-center text-base rotate-12 border-2 border-white shadow-sm">🎀</div>}
       {type === 'king' && <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-4xl animate-pulse">👑</div>}
@@ -209,7 +202,6 @@ const App: React.FC = () => {
   const { playSE, startBGM, stopBGM, isBGMActive, isLoadingBGM, initContext } = useSoundSystem();
 
   useEffect(() => {
-    // 最初のマウント時に音声ブラウザ初期化（ダミー）
     initAudio();
     const savedHistory = localStorage.getItem('eigo_kyun_history');
     if (savedHistory) {
@@ -230,14 +222,14 @@ const App: React.FC = () => {
     localStorage.setItem('eigo_kyun_all_users', JSON.stringify(allUsers));
   };
 
-  const navTo = (page: AppState) => {
+  const navTo = async (page: AppState) => {
+    await initContext(); // ナビゲーション時にも活性化
     playSE('click');
     setCurrentPage(page);
   };
 
   const handleLogin = async () => {
-    // ここでユーザー操作に反応してAudioContextを起動させる（重要！）
-    await initContext();
+    await initContext(); // ユーザー操作でAudioContextを強制起動
     playSE('click');
     
     const allUsers = JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}');
@@ -256,7 +248,8 @@ const App: React.FC = () => {
     }
   };
 
-  const startQuiz = (mode: StudyMode) => {
+  const startQuiz = async (mode: StudyMode) => {
+    await initContext();
     playSE('click');
     const stageStartIndex = (selectedStage - 1) * 50;
     const stageWords = WORD_BANK.slice(stageStartIndex, stageStartIndex + 50);
@@ -491,14 +484,14 @@ const App: React.FC = () => {
           </div>
           <div className="flex gap-1.5">
             <button 
-              onClick={() => {
-                initContext(); // 操作時に再活性化
+              onClick={async () => {
+                await initContext();
                 isBGMActive ? stopBGM() : startBGM();
               }} 
               disabled={isLoadingBGM}
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-sm transition-all ${isLoadingBGM ? 'opacity-50' : ''} ${isBGMActive ? 'bg-pink-100 text-pink-600 font-bold' : 'bg-zinc-100 text-zinc-400'}`}
+              className={`w-12 h-8 rounded-full flex items-center justify-center text-[9px] shadow-sm transition-all ${isLoadingBGM ? 'opacity-50' : ''} ${isBGMActive ? 'bg-pink-100 text-pink-600 font-black' : 'bg-zinc-100 text-zinc-400'}`}
             >
-              {isLoadingBGM ? '⏳' : isBGMActive ? 'ON' : 'OFF'}
+              {isLoadingBGM ? '⏳' : isBGMActive ? 'BGM:ON' : 'BGM:OFF'}
             </button>
             <button onClick={() => navTo('RANKING')} className="bg-pink-400 px-3 py-1 rounded-full text-white font-black text-[7px] uppercase tracking-widest shadow-sm">Rank</button>
           </div>
