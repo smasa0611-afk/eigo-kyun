@@ -1,7 +1,22 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, WordCard, QuizQuestion, Category, StudyMode, TestResult, UserProfile, Reward } from './types';
-import { getWordsByCategory, generateQuiz, generateRewardImage, speakMessage, getAIAdvice, initAudio } from './services/geminiService';
+import {
+  AppState,
+  WordCard,
+  QuizQuestion,
+  Category,
+  StudyMode,
+  TestResult,
+  UserProfile,
+  Reward
+} from './types';
+import {
+  getWordsByCategory,
+  generateQuiz,
+  generateRewardImage,
+  speakMessage,
+  getAIAdvice,
+  initAudio
+} from './services/geminiService';
 import Navigation from './components/Navigation';
 
 const REWARDS: Reward[] = [
@@ -66,11 +81,11 @@ const App: React.FC = () => {
   const [characterMessage, setCharacterMessage] = useState<string>("Hello! Let's study English!");
   const [aiAdvice, setAiAdvice] = useState<string>("データ収集中だニャ...");
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loginStep, setLoginStep] = useState<'ID' | 'NICKNAME'>('ID');
   const [tempId, setTempId] = useState('');
-  
+
   const [timer, setTimer] = useState(0);
   const timerRef = useRef<number | null>(null);
   const [testHistory, setTestHistory] = useState<TestResult[]>([]);
@@ -79,7 +94,7 @@ const App: React.FC = () => {
     const savedSession = localStorage.getItem('eigo_kyun_current_session');
     const savedHistory = localStorage.getItem('eigo_kyun_history');
     const savedImages = localStorage.getItem('eigo_kyun_images');
-    
+
     if (savedSession) {
       const parsedUser = JSON.parse(savedSession);
       setUser(parsedUser);
@@ -185,7 +200,7 @@ const App: React.FC = () => {
     let pool = page === 'LOGIN' ? WELCOME_MESSAGES : KYUN_MESSAGES;
     const randomMsg = pool[Math.floor(Math.random() * pool.length)];
     if (page !== 'LOGIN') setCharacterMessage(randomMsg);
-    
+
     setIsSpeaking(true);
     try {
       await speakMessage(randomMsg);
@@ -199,17 +214,17 @@ const App: React.FC = () => {
   const finishQuiz = (finalCorrect: boolean) => {
     const finalScore = score + (finalCorrect ? 1 : 0);
     setQuizFinished(true);
-    
+
     if (page === 'TEST') {
       const basePts = finalScore * 15;
       const bonusPts = finalScore === quiz.length ? 100 : 0;
       addPoints(basePts + bonusPts);
-      
-      const newResult: TestResult = { 
-        score: finalScore, 
-        total: quiz.length, 
-        timeTaken: timer, 
-        mode: studyMode, 
+
+      const newResult: TestResult = {
+        score: finalScore,
+        total: quiz.length,
+        timeTaken: timer,
+        mode: studyMode,
         date: new Date().toLocaleDateString(),
         category: selectedCategory || '実力テスト'
       };
@@ -217,7 +232,7 @@ const App: React.FC = () => {
       setTestHistory(newHistory);
       localStorage.setItem('eigo_kyun_history', JSON.stringify(newHistory));
     } else {
-      addPoints(30); 
+      addPoints(30);
     }
 
     if (timerRef.current) {
@@ -228,7 +243,7 @@ const App: React.FC = () => {
 
   const handleAnswer = (answer: string) => {
     const isCorrect = answer === quiz[currentQuizIndex].correctAnswer;
-    
+
     if (isCorrect) {
       setScore(s => s + 1);
       setCombo(c => c + 1);
@@ -260,10 +275,10 @@ const App: React.FC = () => {
         const randomCat = categories[Math.floor(Math.random() * categories.length)];
         quizWords = await getWordsByCategory(randomCat);
       }
-      
+
       const generatedQuiz = await generateQuiz(quizWords, mode);
       if (!generatedQuiz || generatedQuiz.length === 0) throw new Error("Quiz is empty");
-      
+
       setQuiz(generatedQuiz);
       setCurrentQuizIndex(0);
       setScore(0);
@@ -293,9 +308,417 @@ const App: React.FC = () => {
       const newImages = { ...rewardImages, [reward.id]: img };
       setRewardImages(newImages);
       localStorage.setItem('eigo_kyun_images', JSON.stringify(newImages));
-      
+
       const updated = {
         ...user,
         points: user.points - reward.cost,
-        unlockedRewards: [...user.unlockedRewards, reward.id]
-      
+        unlockedRewards: [...user.unlockedRewards, reward.id],
+      };
+      saveUserData(updated);
+      setCharacterMessage(`Unlocked! 🎁 ${reward.name}`);
+    } catch (error) {
+      console.error(error);
+      alert("画像生成に失敗したニャ…もう一回ためしてみてニャ！");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // -------------------------
+  // UI (minimum working)
+  // -------------------------
+
+  const goHome = () => {
+    setShowModeSelect(false);
+    setQuizFinished(false);
+    setFeedback(null);
+    setCurrentQuizIndex(0);
+    setScore(0);
+    setCombo(0);
+    setPage('HOME');
+  };
+
+  const logout = () => {
+    localStorage.removeItem('eigo_kyun_current_session');
+    setUser(null);
+    setTempId('');
+    setLoginStep('ID');
+    setPage('LOGIN');
+  };
+
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  const categories = Object.values(Category);
+
+  // ログイン画面
+  const LoginView = () => (
+    <div style={{ maxWidth: 520, margin: '0 auto', padding: 16 }}>
+      <h1 style={{ marginBottom: 8 }}>EIGO-KYUN</h1>
+      <p style={{ marginTop: 0, opacity: 0.85 }}>英単語ゲーム（IDログイン）</p>
+
+      <div style={{ marginTop: 16, padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+        <p style={{ marginTop: 0 }}><b>キャラをタップ</b>するとしゃべるよ！</p>
+        <button onClick={handleCharacterTap} style={{ padding: '10px 14px', borderRadius: 10 }}>
+          きゅん！（タップ）
+        </button>
+        <div style={{ marginTop: 8, fontSize: 14, opacity: 0.9 }}>{characterMessage}</div>
+      </div>
+
+      {loginStep === 'ID' ? (
+        <div style={{ marginTop: 16, padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+          <h3 style={{ marginTop: 0 }}>生徒ID（8桁）</h3>
+          <input
+            placeholder="12345678"
+            inputMode="numeric"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = (e.target as HTMLInputElement).value;
+                handleIdInput(v);
+              }
+            }}
+            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+          />
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+            Enterで確定できます
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+          <h3 style={{ marginTop: 0 }}>ニックネーム</h3>
+          <input
+            placeholder="たろう"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = (e.target as HTMLInputElement).value;
+                handleNicknameInput(v);
+              }
+            }}
+            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+          />
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+            Enterで登録
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, fontSize: 12, opacity: 0.85 }}>
+        ※データはこの端末のブラウザに保存されます
+      </div>
+    </div>
+  );
+
+  // ホーム
+  const HomeView = () => (
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>ようこそ {user?.nickname} さん</h2>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>
+            ID: {user?.id} / ログイン {user?.loginDays}日目
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div><b>ポイント：</b>{user?.points ?? 0}</div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            累計：{user?.totalPoints ?? 0}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <button onClick={handleCharacterTap} style={{ padding: '10px 14px', borderRadius: 10 }}>
+          きゅん！（しゃべる）
+        </button>
+        <div style={{ marginTop: 8, fontSize: 14, opacity: 0.9 }}>{characterMessage}</div>
+      </div>
+
+      <div style={{ marginTop: 18, padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+        <h3 style={{ marginTop: 0 }}>学習をはじめる</h3>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {categories.map((c) => (
+            <button
+              key={String(c)}
+              onClick={() => startLearning(c)}
+              style={{ padding: '10px 12px', borderRadius: 10 }}
+              disabled={loading}
+            >
+              {String(c)}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button
+            onClick={() => setPage('REVIEW')}
+            style={{ padding: '10px 12px', borderRadius: 10 }}
+          >
+            ごほうび / 履歴
+          </button>
+
+          <button
+            onClick={() => startQuiz(studyMode, true)}
+            style={{ padding: '10px 12px', borderRadius: 10 }}
+            disabled={loading}
+          >
+            実力テスト（ランダム）
+          </button>
+
+          <button
+            onClick={logout}
+            style={{ padding: '10px 12px', borderRadius: 10, opacity: 0.9 }}
+          >
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 学習（最低限：単語一覧）
+  const LearnView = () => (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
+      <h2 style={{ marginTop: 0 }}>単語：{selectedCategory ? String(selectedCategory) : ''}</h2>
+
+      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => setShowModeSelect(s => !s)} style={{ padding: '10px 12px', borderRadius: 10 }}>
+          クイズ開始
+        </button>
+        <button onClick={goHome} style={{ padding: '10px 12px', borderRadius: 10 }}>
+          ホームへ
+        </button>
+      </div>
+
+      {showModeSelect && (
+        <div style={{ padding: 12, border: '1px solid #333', borderRadius: 10, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>モードを選んでね</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => startQuiz('EN_TO_JP', false)} style={{ padding: '10px 12px', borderRadius: 10 }}>
+              英→日
+            </button>
+            <button onClick={() => startQuiz('JP_TO_EN', false)} style={{ padding: '10px 12px', borderRadius: 10 }}>
+              日→英
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+        {words.map((w, idx) => (
+          <div key={idx} style={{ border: '1px solid #333', borderRadius: 12, padding: 12 }}>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>{w.english}</div>
+            <div style={{ opacity: 0.9 }}>{w.japanese}</div>
+            {w.example && <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{w.example}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // クイズ（最低限：4択）
+  const QuizView = (isTest: boolean) => {
+    const q = quiz[currentQuizIndex];
+    if (!q) return null;
+
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>{isTest ? '実力テスト' : 'クイズ'}</h2>
+            <div style={{ fontSize: 13, opacity: 0.9 }}>
+              {currentQuizIndex + 1} / {quiz.length}　|　スコア {score}　|　コンボ {combo}
+            </div>
+          </div>
+          {isTest && (
+            <div style={{ fontSize: 14 }}>
+              ⏱ {formatTime(timer)}
+            </div>
+          )}
+        </div>
+
+        {feedback && (
+          <div style={{
+            marginTop: 12,
+            padding: 10,
+            borderRadius: 12,
+            border: '1px solid #333',
+            fontWeight: 800
+          }}>
+            {feedback.text}
+          </div>
+        )}
+
+        <div style={{ marginTop: 14, padding: 14, border: '1px solid #333', borderRadius: 12 }}>
+          <div style={{ fontSize: 14, opacity: 0.85, marginBottom: 6 }}>問題</div>
+          <div style={{ fontSize: 22, fontWeight: 900 }}>{q.question}</div>
+
+          <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            {q.choices.map((choice, i) => (
+              <button
+                key={i}
+                onClick={() => handleAnswer(choice)}
+                style={{ padding: '12px 12px', borderRadius: 12, textAlign: 'left' }}
+                disabled={quizFinished}
+              >
+                {choice}
+              </button>
+            ))}
+          </div>
+
+          {quizFinished && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 900 }}>結果：{score} / {quiz.length}</div>
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={goHome} style={{ padding: '10px 12px', borderRadius: 10 }}>
+                  ホームへ
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!quizFinished && (
+          <div style={{ marginTop: 12 }}>
+            <button onClick={goHome} style={{ padding: '10px 12px', borderRadius: 10 }}>
+              中断してホームへ
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ごほうび / 履歴（最低限）
+  const ReviewView = () => (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ margin: 0 }}>ごほうび / 履歴</h2>
+        <button onClick={goHome} style={{ padding: '10px 12px', borderRadius: 10 }}>
+          ホームへ
+        </button>
+      </div>
+
+      <div style={{ marginTop: 10, padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+        <div style={{ fontWeight: 900, marginBottom: 6 }}>AIアドバイス</div>
+        <div style={{ opacity: 0.9 }}>{aiAdvice}</div>
+      </div>
+
+      <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setReviewSubTab('REWARDS')}
+          style={{ padding: '10px 12px', borderRadius: 10, fontWeight: reviewSubTab === 'REWARDS' ? 900 : 400 }}
+        >
+          ごほうび
+        </button>
+        <button
+          onClick={() => setReviewSubTab('HISTORY')}
+          style={{ padding: '10px 12px', borderRadius: 10, fontWeight: reviewSubTab === 'HISTORY' ? 900 : 400 }}
+        >
+          履歴
+        </button>
+      </div>
+
+      {reviewSubTab === 'REWARDS' ? (
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+          {REWARDS.map(r => {
+            const owned = !!user?.unlockedRewards.includes(r.id);
+            const canBuy = !!user && user.points >= r.cost && !owned;
+            const img = rewardImages[r.id];
+
+            return (
+              <div key={r.id} style={{ border: '1px solid #333', borderRadius: 12, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                  <div style={{ fontWeight: 900 }}>{r.name}</div>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>{r.cost} pt</div>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>{r.description}</div>
+
+                <div style={{ marginTop: 10, height: 160, borderRadius: 12, border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {owned && img ? (
+                    <img src={img} alt={r.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      {owned ? '画像読み込み中…' : '未解放'}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  {owned ? (
+                    <button disabled style={{ padding: '10px 12px', borderRadius: 10, width: '100%' }}>
+                      解放済み
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => unlockReward(r)}
+                      disabled={!canBuy || loading}
+                      style={{ padding: '10px 12px', borderRadius: 10, width: '100%' }}
+                    >
+                      {canBuy ? 'ポイントで解放する' : 'ポイント不足'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          {testHistory.length === 0 ? (
+            <div style={{ padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+              まだ履歴がないよ！
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {testHistory.map((h, idx) => (
+                <div key={idx} style={{ padding: 12, border: '1px solid #333', borderRadius: 10 }}>
+                  <div style={{ fontWeight: 900 }}>{h.date} / {String(h.category)}</div>
+                  <div style={{ marginTop: 6, fontSize: 13, opacity: 0.9 }}>
+                    {h.mode}　|　{h.score}/{h.total}　|　{formatTime(h.timeTaken)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const Main = () => {
+    if (loading) {
+      return (
+        <div style={{ maxWidth: 520, margin: '0 auto', padding: 16 }}>
+          <div style={{ padding: 12, border: '1px solid #333', borderRadius: 10 }}>Loading...</div>
+        </div>
+      );
+    }
+
+    if (page === 'LOGIN') return <LoginView />;
+    if (!user) return <LoginView />;
+
+    if (page === 'HOME') return <HomeView />;
+    if (page === 'LEARN') return <LearnView />;
+    if (page === 'QUIZ') return <QuizView(false) />;
+    if (page === 'TEST') return <QuizView(true) />;
+    if (page === 'REVIEW') return <ReviewView />;
+
+    return <HomeView />;
+  };
+
+  return (
+    <div>
+      <Navigation
+        page={page}
+        onNavigate={(p: AppState) => setPage(p)}
+      />
+      <Main />
+    </div>
+  );
+};
+
+export default App;
