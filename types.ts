@@ -19,14 +19,13 @@ export interface QuizQuestion {
 export interface TestResult {
   score: number;
   total: number;
-  timeTaken: number;
-  mode: StudyMode;
   date: string;
+  timestamp: number;
   category: string;
 }
 
 export interface UserProfile {
-  id: string; // 8-digit unique ID
+  id: string;
   nickname: string;
   points: number;
   totalPoints: number;
@@ -39,11 +38,11 @@ export interface Reward {
   id: string;
   name: string;
   cost: number;
-  imagePrompt: string;
+  emoji: string;
   description: string;
 }
 
-export type AppState = 'LOGIN' | 'HOME' | 'LEARN' | 'QUIZ' | 'REVIEW' | 'TEST';
+export type AppState = 'LOGIN' | 'HOME' | 'LEARN' | 'QUIZ' | 'REVIEW' | 'TEST' | 'RANKING' | 'SHOP';
 
 export type StudyMode = 'EN_TO_JP' | 'JP_TO_EN' | 'EXAMPLE_FILL';
 

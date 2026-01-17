@@ -1,173 +1,68 @@
 
-import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { WordCard, QuizQuestion, StudyMode, TestResult } from "../types";
+import { WordCard, QuizQuestion, StudyMode } from "../types";
 
-// APIキー取得
-const getApiKey = () => process.env.API_KEY || "";
+// Gemini APIは一切使用せず、ブラウザ標準の音声合成のみを使用
+export const speakMessage = (text: string): void => {
+  if (!window.speechSynthesis) return;
+  
+  // 再生中の音声を止めて新しく再生
+  window.speechSynthesis.cancel();
+  
+  const uttr = new SpeechSynthesisUtterance(text);
+  
+  // 英語か日本語かを簡易判定
+  const isEnglish = /^[A-Za-z\s,!?.]+$/.test(text);
+  uttr.lang = isEnglish ? 'en-US' : 'ja-JP';
+  uttr.rate = 1.0;
+  uttr.pitch = 1.3; // キャラクターらしい声の高さ
+  
+  window.speechSynthesis.speak(uttr);
+};
 
-let sharedAudioContext: AudioContext | null = null;
-
+// 起動時に呼び出す初期化処理
 export const initAudio = () => {
-  try {
-    if (!sharedAudioContext) {
-      sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-    }
-    if (sharedAudioContext.state === 'suspended') {
-      sharedAudioContext.resume();
-    }
-  } catch (e) {
-    console.error("Audio init error:", e);
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    const dummy = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(dummy);
   }
 };
 
-// JSON文字列を安全にパースする補助関数
-const safeJsonParse = (text: string) => {
-  if (!text) return null;
-  try {
-    // Markdownの装飾を除去して中身だけ取り出す
-    const jsonMatch = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-    const target = jsonMatch ? jsonMatch[0] : text;
-    return JSON.parse(target);
-  } catch (e) {
-    console.error("JSON Parse Error:", e, text);
-    return null;
-  }
-};
+// オフライン（ローカル）でクイズを生成するロジック
+export const generateQuizOffline = (words: WordCard[], mode: StudyMode, allWords: WordCard[]): QuizQuestion[] => {
+  return words.map(target => {
+    // 同じカテゴリから誤答の選択肢を選ぶ
+    const sameCategoryWords = allWords.filter(w => w.category === target.category && w.id !== target.id);
+    const otherWords = allWords.filter(w => w.id !== target.id);
+    const distractorPool = sameCategoryWords.length >= 3 ? sameCategoryWords : otherWords;
+    
+    const distractors = [...distractorPool]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    
+    let question = "";
+    let correct = "";
+    let options: string[] = [];
 
-export const getWordsByCategory = async (category: string): Promise<WordCard[]> => {
-  const key = getApiKey();
-  if (!key) throw new Error("API_KEY is missing");
-  
-  const ai = new GoogleGenAI({ apiKey: key });
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `中学レベルの単語を10個、カテゴリー「${category}」で作成してJSONで返してください。
-    各項目: id(uuid風), word, meaning(日本語), pronunciation(カタカナ), exampleSentence(英語), exampleMeaning(日本語), category(「${category}」)。`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            word: { type: Type.STRING },
-            meaning: { type: Type.STRING },
-            pronunciation: { type: Type.STRING },
-            exampleSentence: { type: Type.STRING },
-            exampleMeaning: { type: Type.STRING },
-            category: { type: Type.STRING }
-          },
-          required: ["id", "word", "meaning", "pronunciation", "exampleSentence", "exampleMeaning", "category"]
-        }
-      }
+    if (mode === 'EN_TO_JP') {
+      question = `「${target.word}」の意味は？`;
+      correct = target.meaning;
+      options = [correct, ...distractors.map(d => d.meaning)].sort(() => Math.random() - 0.5);
+    } else if (mode === 'JP_TO_EN') {
+      question = `「${target.meaning}」を英語で？`;
+      correct = target.word;
+      options = [correct, ...distractors.map(d => d.word)].sort(() => Math.random() - 0.5);
+    } else {
+      const displaySentence = target.exampleSentence.replace(new RegExp(target.word, 'gi'), '_____');
+      question = `空欄に入る単語は？\n"${displaySentence}"`;
+      correct = target.word;
+      options = [correct, ...distractors.map(d => d.word)].sort(() => Math.random() - 0.5);
     }
-  });
-  
-  const data = safeJsonParse(response.text);
-  if (!data || !Array.isArray(data)) throw new Error("Format error");
-  return data;
-};
 
-export const generateQuiz = async (words: WordCard[], mode: StudyMode): Promise<QuizQuestion[]> => {
-  const key = getApiKey();
-  if (!key) throw new Error("API_KEY is missing");
-
-  const ai = new GoogleGenAI({ apiKey: key });
-  const wordsSummary = words.map(w => `${w.word}:${w.meaning}`).join(",");
-  
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `単語リスト[${wordsSummary}]を使って、モード[${mode}]の4択クイズを5問作成。JSON arrayで返して。`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            correctAnswer: { type: Type.STRING },
-            explanation: { type: Type.STRING }
-          },
-          required: ["question", "options", "correctAnswer", "explanation"]
-        }
-      }
-    }
-  });
-  
-  const data = safeJsonParse(response.text);
-  if (!data || !Array.isArray(data)) throw new Error("Quiz format error");
-  return data;
-};
-
-export const generateRewardImage = async (prompt: string): Promise<string> => {
-  const key = getApiKey();
-  const ai = new GoogleGenAI({ apiKey: key });
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: {
-      parts: [{ text: `Kawaii anime style mascot: ${prompt}. Pastel colors, white background.` }]
-    }
-  });
-  const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-  return part ? `data:image/png;base64,${part.inlineData.data}` : "";
-};
-
-export const getAIAdvice = async (history: TestResult[], nickname: string): Promise<string> => {
-  const key = getApiKey();
-  const ai = new GoogleGenAI({ apiKey: key });
-  const summary = history.map(h => h.score).join(",");
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `ユーザー「${nickname}」の最近のスコア[${summary}]。ネコキャラとして褒め言葉を20文字以内で。語尾はニャ。`,
-  });
-  return response.text || "よく頑張ってるニャ！";
-};
-
-export const speakMessage = async (text: string): Promise<void> => {
-  initAudio();
-  if (!sharedAudioContext) return;
-  const ctx = sharedAudioContext;
-  const key = getApiKey();
-
-  const ai = new GoogleGenAI({ apiKey: key });
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `${text}` }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' },
-        },
-      },
-    },
-  });
-
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) return;
-
-  const binaryString = atob(base64Audio);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  
-  const dataInt16 = new Int16Array(bytes.buffer);
-  const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
-  const channelData = buffer.getChannelData(0);
-  for (let i = 0; i < dataInt16.length; i++) {
-    channelData[i] = dataInt16[i] / 32768.0;
-  }
-  
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start();
-
-  return new Promise((resolve) => {
-    source.onended = () => resolve();
+    return {
+      question,
+      options,
+      correctAnswer: correct,
+      explanation: `${target.word} = ${target.meaning}`
+    };
   });
 };
