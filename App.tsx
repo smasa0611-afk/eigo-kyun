@@ -18,92 +18,72 @@ const REWARDS: (Reward & { type: string; aura: string; color: string })[] = [
   { id: 'r12', name: '王様たま', cost: 1000, emoji: '👑', type: 'king', aura: 'from-amber-400 to-orange-600', color: '#fff9db', description: '英語界のレジェンドだニャ。' },
 ];
 
-const TamaRenderer: React.FC<{ type?: string; scale?: number; emotion?: 'happy' | 'proud' | 'normal'; color?: string }> = ({ type = 'normal', scale = 1, emotion = 'normal', color = '#ffffff' }) => {
+const TamaRenderer: React.FC<{ type?: string; scale?: number; emotion?: 'happy' | 'proud' | 'normal' | 'sad'; color?: string }> = ({ type = 'normal', scale = 1, emotion = 'normal', color = '#ffffff' }) => {
   return (
     <div className="relative inline-block" style={{ transform: `scale(${scale})`, width: '220px', height: '220px' }}>
-      {/* 影 */}
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-32 h-6 bg-black/5 rounded-[100%] blur-xl"></div>
+      {/* 床の影 */}
+      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-36 h-6 bg-black/5 rounded-[100%] blur-xl"></div>
       
-      {/* しっぽ */}
-      <div className="absolute bottom-10 right-2 w-16 h-20 border-[12px] border-[#f0f0f0] rounded-full border-t-transparent border-l-transparent rotate-[30deg] animate-tail" style={{ borderColor: `transparent transparent ${color} ${color}` }}></div>
+      {/* しっぽ：ぽてっとした猫のしっぽ */}
+      <div className="absolute bottom-10 -right-2 w-10 h-20 border-[14px] border-[#f0f0f0] rounded-[40%] border-t-transparent border-l-transparent rotate-[25deg] animate-tail origin-bottom-left" style={{ borderColor: `transparent transparent ${color} ${color}` }}></div>
 
-      {/* メインボディ */}
-      <div className="absolute inset-4 rounded-[45%_45%_40%_40%] shadow-[inset_-8px_-12px_24px_rgba(0,0,0,0.05),0_20px_40px_rgba(0,0,0,0.05)] border border-white/50 overflow-hidden transition-colors duration-500" style={{ backgroundColor: color }}>
-        <div className="absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-40 h-40 bg-white/30 rounded-full blur-2xl"></div>
+      {/* メインボディ：より「おもち」に近いぽてっとしたフォルム */}
+      <div className="absolute inset-2 rounded-[55%_45%_42%_42%] shadow-[inset_-10px_-15px_30px_rgba(0,0,0,0.03),0_15px_40px_rgba(0,0,0,0.04)] border-2 border-white/90 overflow-hidden transition-colors duration-500" style={{ backgroundColor: color }}>
+        <div className="absolute bottom-[-15%] left-1/2 -translate-x-1/2 w-48 h-40 bg-white/50 rounded-full blur-3xl"></div>
       </div>
       
-      {/* 耳：ちゃんと猫の耳に */}
-      <div className="absolute top-2 left-6 w-16 h-20 bg-white rounded-[80%_20%_20%_20%] -rotate-[25deg] shadow-sm" style={{ backgroundColor: color }}>
-        <div className="absolute inset-3 bg-pink-100/50 rounded-[80%_20%_20%_20%]"></div>
+      {/* 耳：さらにまるっこい猫耳 */}
+      <div className="absolute top-1 left-7 w-16 h-16 bg-white rounded-[70%_30%_30%_30%] -rotate-[22deg] shadow-sm border-t border-white/50" style={{ backgroundColor: color }}>
+        <div className="absolute inset-4 bg-rose-50 rounded-[60%_20%_20%_20%]"></div>
       </div>
-      <div className="absolute top-2 right-6 w-16 h-20 bg-white rounded-[20%_80%_20%_20%] rotate-[25deg] shadow-sm" style={{ backgroundColor: color }}>
-        <div className="absolute inset-3 bg-pink-100/50 rounded-[20%_80%_20%_20%]"></div>
+      <div className="absolute top-1 right-7 w-16 h-16 bg-white rounded-[30%_70%_30%_30%] rotate-[22deg] shadow-sm border-t border-white/50" style={{ backgroundColor: color }}>
+        <div className="absolute inset-4 bg-rose-50 rounded-[20%_60%_20%_20%]"></div>
       </div>
 
-      {/* 顔 */}
-      <div className="absolute top-[48%] left-1/2 -translate-x-1/2 w-full px-12 flex flex-col items-center z-10">
-        <div className="flex justify-between w-full mb-3">
-          <div className={`w-4 h-4 bg-[#2D3436] rounded-full relative ${emotion === 'happy' ? 'h-2 mt-2 rounded-t-full bg-transparent border-t-4 border-[#2D3436]' : ''}`}>
-             {emotion !== 'happy' && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-white rounded-full"></div>}
+      {/* 顔：ゆるキャラパーツ配置 */}
+      <div className="absolute top-[48%] left-1/2 -translate-x-1/2 w-full px-14 flex flex-col items-center z-10">
+        <div className="flex justify-between w-full mb-2">
+          {/* 目：離して配置 */}
+          <div className={`w-3 h-3 bg-[#444] rounded-full relative ${emotion === 'happy' ? 'h-1.5 mt-1 rounded-t-full bg-transparent border-t-[3px] border-[#444]' : emotion === 'sad' ? 'h-1.5 mt-2 border-b-[3px] border-[#444] bg-transparent' : ''}`}>
+             {emotion === 'normal' && <div className="absolute top-0.5 right-0.5 w-0.5 h-0.5 bg-white rounded-full"></div>}
           </div>
-          <div className={`w-4 h-4 bg-[#2D3436] rounded-full relative ${emotion === 'happy' ? 'h-2 mt-2 rounded-t-full bg-transparent border-t-4 border-[#2D3436]' : ''}`}>
-             {emotion !== 'happy' && <div className="absolute top-1 left-1 w-1.5 h-1.5 bg-white rounded-full"></div>}
+          <div className={`w-3 h-3 bg-[#444] rounded-full relative ${emotion === 'happy' ? 'h-1.5 mt-1 rounded-t-full bg-transparent border-t-[3px] border-[#444]' : emotion === 'sad' ? 'h-1.5 mt-2 border-b-[3px] border-[#444] bg-transparent' : ''}`}>
+             {emotion === 'normal' && <div className="absolute top-0.5 left-0.5 w-0.5 h-0.5 bg-white rounded-full"></div>}
           </div>
         </div>
         
-        {/* ヒゲ */}
-        <div className="absolute top-4 -left-2 flex flex-col gap-1.5">
-          <div className="w-8 h-[2px] bg-zinc-300 -rotate-6"></div>
-          <div className="w-10 h-[2px] bg-zinc-300"></div>
-        </div>
-        <div className="absolute top-4 -right-2 flex flex-col gap-1.5">
-          <div className="w-8 h-[2px] bg-zinc-300 rotate-6"></div>
-          <div className="w-10 h-[2px] bg-zinc-300"></div>
+        {/* 口元：ふっくら ω */}
+        <div className="flex -mt-0.5 scale-125">
+          <div className="w-4 h-4 border-b-[2.5px] border-[#444] rounded-full -mr-[1px] opacity-60"></div>
+          <div className="w-4 h-4 border-b-[2.5px] border-[#444] rounded-full opacity-60"></div>
         </div>
 
-        <div className="relative -mt-1 flex items-center">
-          <div className="w-5 h-5 border-b-[3px] border-[#2D3436] rounded-full -mr-0.5 opacity-80"></div>
-          <div className="w-5 h-5 border-b-[3px] border-[#2D3436] rounded-full opacity-80"></div>
-        </div>
+        {/* ほんのりチーク */}
+        <div className="absolute top-6 -left-1 w-6 h-4 bg-pink-200/40 rounded-full blur-[3px]"></div>
+        <div className="absolute top-6 -right-1 w-6 h-4 bg-pink-200/40 rounded-full blur-[3px]"></div>
       </div>
 
-      {/* アイテム個別描画 */}
+      {/* もちもちの手 */}
+      <div className="absolute bottom-12 left-12 w-6 h-6 bg-white rounded-full border-b-[2px] border-zinc-50 shadow-sm z-10" style={{ backgroundColor: color }}></div>
+      <div className="absolute bottom-12 right-12 w-6 h-6 bg-white rounded-full border-b-[2px] border-zinc-50 shadow-sm z-10" style={{ backgroundColor: color }}></div>
+
+      {/* ごほうびアイテム */}
       {type === 'glasses' && (
         <div className="absolute inset-0 z-20 pointer-events-none">
-          <div className="absolute top-[42%] left-1/2 -translate-x-1/2 w-[110%] flex justify-center items-center gap-1">
-            <div className="w-16 h-16 border-[4px] border-[#1e272e] rounded-full bg-blue-100/20 backdrop-blur-sm relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-white/10 rotate-45"></div>
-            </div>
-            <div className="w-4 h-1.5 bg-[#1e272e] rounded-full mt-2"></div>
-            <div className="w-16 h-16 border-[4px] border-[#1e272e] rounded-full bg-blue-100/20 backdrop-blur-sm relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-white/10 rotate-45"></div>
-            </div>
-          </div>
-          <div className="absolute bottom-6 right-0 w-20 h-24 bg-white border-[4px] border-[#1e272e] rounded-lg shadow-xl rotate-12 flex flex-col p-2 gap-1 overflow-hidden">
-             <div className="w-full h-2 bg-blue-100 rounded-full"></div>
-             <div className="w-full h-2 bg-zinc-50 rounded-full"></div>
-             <div className="w-1/2 h-2 bg-zinc-50 rounded-full"></div>
-             <div className="mt-auto self-end w-6 h-6 bg-[#FF7EB9] rounded-full flex items-center justify-center text-[8px] text-white font-black italic shadow-inner">Ky!</div>
+          <div className="absolute top-[44%] left-1/2 -translate-x-1/2 w-full flex justify-center items-center gap-0.5">
+            <div className="w-12 h-12 border-[3px] border-[#333] rounded-full bg-blue-50/20 backdrop-blur-[1px]"></div>
+            <div className="w-3 h-[2px] bg-[#333] mt-2"></div>
+            <div className="w-12 h-12 border-[3px] border-[#333] rounded-full bg-blue-50/20 backdrop-blur-[1px]"></div>
           </div>
         </div>
       )}
-
-      {type === 'fire' && <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-7xl animate-bounce">🔥</div>}
-      {type === 'ribbon' && <div className="absolute top-2 right-4 w-12 h-12 bg-rose-400 rounded-lg shadow-lg flex items-center justify-center text-3xl rotate-12 border-2 border-white">🎀</div>}
-      {type === 'sushi' && <div className="absolute -bottom-2 right-2 w-20 h-12 bg-white rounded-lg shadow-lg border-2 border-orange-50 flex items-center justify-center text-4xl">🍣</div>}
-      {type === 'rain' && <div className="absolute -top-16 left-1/2 -translate-x-1/2 text-8xl opacity-80">☔</div>}
-      {type === 'king' && (
-        <div className="absolute -top-14 left-1/2 -translate-x-1/2 flex flex-col items-center">
-          <div className="text-8xl animate-pulse">👑</div>
-          <div className="w-32 h-40 bg-rose-600/10 absolute top-20 rounded-full blur-3xl -z-10"></div>
-        </div>
-      )}
-      {type === 'detective' && <div className="absolute -top-6 left-6 w-28 h-10 bg-amber-900 rounded-t-3xl border-b-8 border-amber-950 -rotate-6 shadow-xl"></div>}
-      {type === 'angel' && <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-28 h-4 bg-yellow-200/60 rounded-full blur-sm border border-yellow-100"></div>}
-
-      {/* 手 */}
-      <div className="absolute bottom-12 left-8 w-8 h-8 bg-white rounded-full border-b-4 border-zinc-100 shadow-sm z-10" style={{ backgroundColor: color }}></div>
-      {type !== 'glasses' && <div className="absolute bottom-12 right-8 w-8 h-8 bg-white rounded-full border-b-4 border-zinc-100 shadow-sm z-10" style={{ backgroundColor: color }}></div>}
+      {type === 'fire' && <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-5xl animate-bounce">🔥</div>}
+      {type === 'ribbon' && <div className="absolute top-1 right-6 w-10 h-10 bg-rose-400 rounded-full shadow-lg flex items-center justify-center text-2xl rotate-12 border-2 border-white">🎀</div>}
+      {type === 'sushi' && <div className="absolute -bottom-2 right-6 w-16 h-10 bg-white rounded-full shadow-md border-2 border-orange-50 flex items-center justify-center text-3xl">🍣</div>}
+      {type === 'rain' && <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-7xl opacity-90 drop-shadow-md">☔</div>}
+      {type === 'king' && <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-7xl animate-pulse drop-shadow-lg">👑</div>}
+      {type === 'detective' && <div className="absolute -top-3 left-8 w-24 h-8 bg-amber-900 rounded-t-[50%] border-b-[4px] border-amber-950 -rotate-2"></div>}
+      {type === 'angel' && <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-20 h-4 bg-yellow-100/80 rounded-full border border-yellow-200"></div>}
     </div>
   );
 };
@@ -114,7 +94,7 @@ const App: React.FC = () => {
   const [loginId, setLoginId] = useState('');
   const [nickname, setNickname] = useState('');
   const [isFirstLogin, setIsFirstLogin] = useState(false);
-  const [characterMessage, setCharacterMessage] = useState('こんにちは！一緒に楽しく学ぼうニャ！');
+  const [characterMessage, setCharacterMessage] = useState('こんにちは！一緒に学ぼうニャ！');
   const [selectedStage, setSelectedStage] = useState<number>(1);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [currentQuizIdx, setCurrentQuizIdx] = useState(0);
@@ -122,8 +102,10 @@ const App: React.FC = () => {
   const [lastAnswerFeedback, setLastAnswerFeedback] = useState<'CORRECT' | 'WRONG' | null>(null);
   const [testHistory, setTestHistory] = useState<TestResult[]>([]);
   const [currentMissionStage, setCurrentMissionStage] = useState(1);
+  const [studyMode, setStudyMode] = useState<StudyMode>('EN_TO_JP');
 
   useEffect(() => {
+    initAudio();
     const savedHistory = localStorage.getItem('eigo_kyun_history');
     if (savedHistory) {
       const history = JSON.parse(savedHistory);
@@ -134,7 +116,7 @@ const App: React.FC = () => {
         .reduce((max: number, current: number) => Math.max(max, current), 0);
       setCurrentMissionStage(maxCleared + 1);
     }
-  }, [currentPage]);
+  }, []);
 
   const saveUserData = (updated: UserProfile) => {
     setUser(updated);
@@ -146,7 +128,7 @@ const App: React.FC = () => {
   const buyReward = (reward: Reward) => {
     if (!user) return;
     if (user.points < reward.cost) {
-      setCharacterMessage('ポイントが足りないニャ…もっと勉強するニャ！');
+      setCharacterMessage('ポイントが足りないニャ…頑張るニャ！');
       return;
     }
     const updatedUser: UserProfile = {
@@ -155,25 +137,33 @@ const App: React.FC = () => {
       unlockedRewards: [...user.unlockedRewards, reward.id]
     };
     saveUserData(updatedUser);
-    setCharacterMessage(`${reward.name}をゲット！似合ってるかニャ？`);
+    setCharacterMessage(`${reward.name}、似合ってるかニャ？`);
+  };
+
+  const startQuiz = (mode: StudyMode) => {
+    const sWords = WORD_BANK.slice((selectedStage-1)*50, (selectedStage-1)*50 + 10);
+    const quiz = generateQuizOffline(sWords, mode, WORD_BANK);
+    setQuizQuestions(quiz);
+    setCurrentQuizIdx(0);
+    setCorrectCount(0);
+    setLastAnswerFeedback(null);
+    setStudyMode(mode);
+    setCurrentPage('QUIZ');
   };
 
   const renderContent = () => {
     switch (currentPage) {
       case 'LOGIN':
         return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#fdfaf9] page-enter">
-            <div className="w-full max-w-sm text-center">
-              <div className="mb-10 scale-110">
-                 <TamaRenderer scale={1.2} emotion="happy" />
-              </div>
-              <h1 className="text-4xl font-black text-zinc-900 mb-2 tracking-tighter">Eigo★Kyun!</h1>
-              <p className="text-xs font-bold text-[#FFB6C1] uppercase tracking-[0.4em] mb-12">New Gen English Lab</p>
+          <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#fdfaf9] page-enter overflow-hidden">
+            <div className="w-full max-w-sm text-center relative">
+              <div className="mb-8 scale-110"><TamaRenderer scale={1.2} emotion="happy" /></div>
+              <h1 className="text-4xl font-black text-zinc-800 mb-1 tracking-tighter italic">Eigo★Kyun!</h1>
+              <p className="text-[10px] font-black text-pink-300 uppercase tracking-[0.4em] mb-12">もちもち英単語ラボ</p>
               <div className="space-y-4">
-                <input type="text" inputMode="numeric" placeholder="8桁のIDを入力" maxLength={8} className="w-full bg-white border-2 border-zinc-100 p-5 rounded-3xl text-center text-xl font-bold text-zinc-800 outline-none focus:border-[#FF7EB9] transition-all shadow-sm" value={loginId} onChange={e => setLoginId(e.target.value.replace(/\D/g, ''))} />
-                {isFirstLogin && <input type="text" placeholder="なまえを教えてニャ" className="w-full bg-white border-2 border-zinc-100 p-5 rounded-3xl text-center text-lg font-bold text-zinc-800 outline-none focus:border-blue-200 shadow-sm" value={nickname} onChange={e => setNickname(e.target.value)} />}
+                <input type="text" inputMode="numeric" placeholder="8桁のID" maxLength={8} className="w-full bg-white border-2 border-zinc-50 p-5 rounded-[2.5rem] text-center text-xl font-bold outline-none focus:border-pink-200 transition-all shadow-sm" value={loginId} onChange={e => setLoginId(e.target.value.replace(/\D/g, ''))} />
+                {isFirstLogin && <input type="text" placeholder="なまえを教えてニャ" className="w-full bg-white border-2 border-zinc-50 p-5 rounded-[2.5rem] text-center text-lg font-bold outline-none focus:border-blue-200 shadow-sm" value={nickname} onChange={e => setNickname(e.target.value)} />}
                 <button onClick={() => {
-                  initAudio();
                   const allUsers = JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}');
                   if (isFirstLogin) {
                     if (!nickname) return;
@@ -186,7 +176,7 @@ const App: React.FC = () => {
                   } else {
                     setIsFirstLogin(true);
                   }
-                }} className="w-full bg-zinc-900 text-white py-5 rounded-3xl font-black text-xl shadow-xl active:scale-95 transition-all">START!</button>
+                }} className="w-full bg-zinc-800 text-white py-5 rounded-[2.5rem] font-black text-xl shadow-lg active:scale-95 transition-all">はじめる！</button>
               </div>
             </div>
           </div>
@@ -194,24 +184,20 @@ const App: React.FC = () => {
       case 'HOME':
         const curReward = user?.unlockedRewards.length ? REWARDS.find(r => r.id === user.unlockedRewards[user.unlockedRewards.length - 1]) : null;
         return (
-          <div className="p-8 pt-12 space-y-12 page-enter pb-32">
+          <div className="p-8 pt-10 space-y-12 page-enter pb-32">
             <div className="flex flex-col items-center">
-               <div className="floating-slow mb-8">
-                 <TamaRenderer type={curReward?.type} color={curReward?.color} scale={1.7} emotion="happy" />
-               </div>
-               <div className="glass p-6 rounded-[2.5rem] border border-white shadow-xl max-w-[280px] w-full relative">
-                 <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-white border-l border-t border-zinc-50 rotate-45"></div>
-                 <p className="text-zinc-800 font-bold text-lg text-center leading-relaxed italic">"{characterMessage}"</p>
+               <div className="floating-slow mb-8"><TamaRenderer type={curReward?.type} color={curReward?.color} scale={1.7} emotion="happy" /></div>
+               <div className="glass p-7 rounded-[3rem] border border-white/60 shadow-xl max-w-[280px] w-full relative">
+                 <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-white/80 border-l border-t border-zinc-50 rotate-45"></div>
+                 <p className="text-zinc-700 font-bold text-lg text-center leading-relaxed italic">"{characterMessage}"</p>
                </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-               <button onClick={() => setCurrentPage('LEARN')} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 group active:scale-95 transition-all">
-                 <span className="text-4xl group-hover:scale-110 transition-transform">📚</span>
-                 <span className="text-xs font-black text-zinc-400">LEARN</span>
+            <div className="grid grid-cols-2 gap-5">
+               <button onClick={() => setCurrentPage('LEARN')} className="bg-white p-8 rounded-[3rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 active:scale-95 transition-all">
+                 <span className="text-4xl">🍙</span><span className="text-[10px] font-black text-zinc-400 tracking-widest uppercase">Learn</span>
                </button>
-               <button onClick={() => setCurrentPage('SHOP')} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 group active:scale-95 transition-all">
-                 <span className="text-4xl group-hover:scale-110 transition-transform">🎁</span>
-                 <span className="text-xs font-black text-zinc-400">SHOP</span>
+               <button onClick={() => setCurrentPage('SHOP')} className="bg-white p-8 rounded-[3rem] shadow-sm border border-zinc-50 flex flex-col items-center gap-2 active:scale-95 transition-all">
+                 <span className="text-4xl">🎀</span><span className="text-[10px] font-black text-zinc-400 tracking-widest uppercase">Shop</span>
                </button>
             </div>
           </div>
@@ -219,15 +205,15 @@ const App: React.FC = () => {
       case 'LEARN':
         return (
           <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-900 tracking-tighter italic">World Map</h2>
+            <h2 className="text-4xl font-black text-zinc-800 tracking-tighter italic">World Map</h2>
             <div className="grid grid-cols-2 gap-6">
               {Array.from({ length: 12 }).map((_, i) => {
                 const s = i + 1;
                 const isLocked = s > currentMissionStage;
                 return (
-                  <button key={s} disabled={isLocked} onClick={() => { setSelectedStage(s); setCurrentPage('TEST'); }} className={`p-8 rounded-[2.5rem] shadow-sm border-2 transition-all flex flex-col items-center gap-4 ${isLocked ? 'bg-zinc-50 border-zinc-100 opacity-50' : s === currentMissionStage ? 'bg-white border-[#FF7EB9] scale-105 z-10' : 'bg-white border-white active:scale-95'}`}>
-                    <div className="text-5xl">{isLocked ? '🔒' : s < currentMissionStage ? '✨' : '📍'}</div>
-                    <p className="text-3xl font-black text-zinc-800">{s}</p>
+                  <button key={s} disabled={isLocked} onClick={() => { setSelectedStage(s); setCurrentPage('TEST'); }} className={`p-8 rounded-[3rem] shadow-sm border-2 transition-all flex flex-col items-center gap-4 ${isLocked ? 'bg-zinc-50 border-zinc-100 opacity-30' : s === currentMissionStage ? 'bg-white border-pink-300 scale-105 z-10 shadow-lg' : 'bg-white border-white active:scale-95'}`}>
+                    <div className="text-5xl">{isLocked ? '🔒' : s < currentMissionStage ? '👑' : '🐾'}</div>
+                    <p className="text-3xl font-black text-zinc-700 tracking-tighter">{s}</p>
                   </button>
                 );
               })}
@@ -237,27 +223,26 @@ const App: React.FC = () => {
       case 'TEST':
         const sWords = WORD_BANK.slice((selectedStage-1)*50, (selectedStage-1)*50 + 10);
         return (
-          <div className="p-8 pt-12 space-y-10 page-enter pb-32">
+          <div className="p-8 pt-12 space-y-8 page-enter pb-32">
             <div className="flex items-center justify-between">
-              <button onClick={() => setCurrentPage('LEARN')} className="text-zinc-400 font-black text-[10px] uppercase tracking-widest bg-white px-6 py-2 rounded-full border border-zinc-50 shadow-sm">Map</button>
-              <h2 className="text-2xl font-black text-zinc-900 tracking-tight">Stage {selectedStage}</h2>
+              <button onClick={() => setCurrentPage('LEARN')} className="text-zinc-400 font-black text-[10px] tracking-widest bg-white px-6 py-2 rounded-full border border-zinc-50 shadow-sm">MAP</button>
+              <h2 className="text-2xl font-black text-zinc-800 tracking-tight">Stage {selectedStage}</h2>
             </div>
-            <button onClick={() => {
-              const quiz = generateQuizOffline(sWords, 'EN_TO_JP', WORD_BANK);
-              setQuizQuestions(quiz);
-              setCurrentQuizIdx(0);
-              setCorrectCount(0);
-              setLastAnswerFeedback(null);
-              setCurrentPage('QUIZ');
-            }} className="w-full bg-[#FF7EB9] text-white py-6 rounded-3xl font-black text-xl shadow-lg active:scale-95 transition-all">TRY QUIZ!</button>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => startQuiz('EN_TO_JP')} className="bg-pink-400 text-white py-6 rounded-[2rem] font-black text-lg shadow-md active:scale-95 transition-all">英和テスト</button>
+              <button onClick={() => startQuiz('JP_TO_EN')} className="bg-zinc-800 text-white py-6 rounded-[2rem] font-black text-lg shadow-md active:scale-95 transition-all">和英テスト</button>
+            </div>
+
             <div className="space-y-4">
+              <p className="text-[10px] font-black text-zinc-300 uppercase tracking-widest px-4">Word List</p>
               {sWords.map(w => (
-                <div key={w.id} className="bg-white p-6 rounded-[2rem] flex items-center justify-between shadow-sm group">
+                <div key={w.id} className="bg-white p-7 rounded-[2.5rem] flex items-center justify-between shadow-sm border border-zinc-50">
                   <div>
-                    <p className="text-2xl font-black text-zinc-800 tracking-tight group-hover:text-[#FF7EB9] transition-colors">{w.word}</p>
-                    <p className="text-xs font-bold text-zinc-300">{w.meaning}</p>
+                    <p className="text-2xl font-black text-zinc-700 tracking-tight">{w.word}</p>
+                    <p className="text-xs font-bold text-zinc-300 italic">{w.meaning}</p>
                   </div>
-                  <button onClick={() => speakMessage(w.word)} className="bg-zinc-50 p-4 rounded-2xl text-xl hover:bg-[#FF7EB9] hover:text-white transition-all">🔊</button>
+                  <button onClick={() => { speakMessage(w.word); }} className="bg-zinc-50 p-4 rounded-[1.5rem] text-xl active:bg-pink-100 transition-colors">🔊</button>
                 </div>
               ))}
             </div>
@@ -265,13 +250,35 @@ const App: React.FC = () => {
         );
       case 'QUIZ':
         const q = quizQuestions[currentQuizIdx];
+        const curRewardForQuiz = user?.unlockedRewards.length ? REWARDS.find(r => r.id === user.unlockedRewards[user.unlockedRewards.length - 1]) : null;
         return (
-          <div className="p-8 pt-20 min-h-screen page-enter bg-[#fdfaf9]">
-            <div className="max-w-sm mx-auto space-y-10">
-              <div className="text-center bg-white p-12 rounded-[3.5rem] border border-zinc-50 shadow-2xl relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[9px] px-6 py-2 rounded-full font-black tracking-widest">{currentQuizIdx + 1} / 10</div>
-                <h3 className="text-3xl font-black text-zinc-900 mt-4 tracking-tight leading-tight">{q?.question}</h3>
+          <div className="p-8 pt-10 min-h-screen page-enter bg-[#fdfaf9] flex flex-col items-center">
+            {lastAnswerFeedback && (
+              <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none animate-result-pop">
+                <span className={`text-[12rem] font-black drop-shadow-2xl ${lastAnswerFeedback === 'CORRECT' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {lastAnswerFeedback === 'CORRECT' ? '○' : '×'}
+                </span>
               </div>
+            )}
+
+            <div className="mb-4 scale-75"><TamaRenderer type={curRewardForQuiz?.type} color={curRewardForQuiz?.color} scale={1.5} emotion={lastAnswerFeedback === 'WRONG' ? 'sad' : 'normal'} /></div>
+
+            <div className="w-full max-w-sm space-y-6">
+              <div className="text-center bg-white p-10 rounded-[3.5rem] border border-zinc-50 shadow-2xl relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[9px] px-6 py-2 rounded-full font-black tracking-widest">{currentQuizIdx + 1} / 10</div>
+                <h3 className="text-3xl font-black text-zinc-700 mt-4 tracking-tight leading-tight whitespace-pre-wrap">{q?.question}</h3>
+              </div>
+
+              {lastAnswerFeedback === 'WRONG' && (
+                <div className="bg-zinc-800 text-white p-6 rounded-[2.5rem] shadow-xl animate-pop-in relative">
+                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-zinc-800 rotate-45"></div>
+                   <p className="text-center font-bold text-sm leading-relaxed tracking-tight">
+                    正解は「<span className="text-pink-300">{q.correctAnswer}</span>」だニャ！<br/>
+                    <span className="text-zinc-400 text-xs font-normal">{q.explanation}</span>
+                  </p>
+                </div>
+              )}
+
               <div className="grid gap-3">
                 {q?.options.map((opt, i) => (
                   <button key={i} onClick={() => {
@@ -289,8 +296,8 @@ const App: React.FC = () => {
                         if (user) saveUserData({ ...user, points: user.points + score * 10, totalPoints: user.totalPoints + score * 10 });
                         setCurrentPage('REVIEW');
                       }
-                    }, 800);
-                  }} disabled={!!lastAnswerFeedback} className={`bg-white p-6 rounded-[2rem] border-2 text-left font-black text-lg transition-all ${lastAnswerFeedback ? (opt === q.correctAnswer ? 'bg-emerald-50 border-emerald-300 scale-105' : 'opacity-20') : 'border-zinc-50 hover:border-[#FF7EB9] active:scale-95'}`}>
+                    }, isCorrect ? 800 : 2500);
+                  }} disabled={!!lastAnswerFeedback} className={`bg-white p-6 rounded-[2.5rem] border-2 text-left font-black text-lg transition-all ${lastAnswerFeedback ? (opt === q.correctAnswer ? 'bg-emerald-50 border-emerald-200 scale-105' : 'opacity-20') : 'border-zinc-50 active:scale-95'}`}>
                     {opt}
                   </button>
                 ))}
@@ -302,23 +309,23 @@ const App: React.FC = () => {
         return (
           <div className="p-8 pt-12 space-y-12 page-enter pb-48">
              <div className="flex justify-between items-end">
-              <h2 className="text-4xl font-black text-zinc-900 italic tracking-tighter">Boutique</h2>
-              <div className="bg-[#FF7EB9] text-white px-6 py-3 rounded-full font-black text-lg shadow-md">{user?.points} <span className="text-[10px] opacity-60">PT</span></div>
+              <h2 className="text-4xl font-black text-zinc-800 italic tracking-tighter">Boutique</h2>
+              <div className="bg-pink-400 text-white px-6 py-3 rounded-full font-black text-lg shadow-md">{user?.points} <span className="text-[10px] opacity-60">PT</span></div>
             </div>
-            <div className="grid grid-cols-1 gap-12">
+            <div className="grid grid-cols-1 gap-14">
               {REWARDS.map(r => {
                 const isUnlocked = user?.unlockedRewards.includes(r.id);
                 return (
-                  <div key={r.id} className={`bg-white p-10 rounded-[4rem] border-2 transition-all flex flex-col items-center text-center relative ${isUnlocked ? 'border-zinc-50 opacity-60' : 'border-white shadow-2xl'}`}>
+                  <div key={r.id} className={`bg-white p-12 rounded-[4.5rem] border-2 transition-all flex flex-col items-center text-center relative ${isUnlocked ? 'border-zinc-50 opacity-50' : 'border-white shadow-2xl'}`}>
                     <div className="mb-10 relative">
-                       <div className={`absolute inset-0 ${r.aura} blur-[40px] rounded-full opacity-40`}></div>
+                       <div className={`absolute inset-0 ${r.aura} blur-[40px] rounded-full opacity-30`}></div>
                        <TamaRenderer type={r.type} color={r.color} scale={1.2} />
                     </div>
-                    <div className="space-y-2 mb-8">
-                      <p className="text-3xl font-black text-zinc-900">{r.name}</p>
-                      <p className="text-[10px] font-bold text-zinc-400 px-8 italic">"{r.description}"</p>
+                    <div className="space-y-2 mb-8 px-4">
+                      <p className="text-3xl font-black text-zinc-800">{r.name}</p>
+                      <p className="text-[10px] font-bold text-zinc-400 italic">"{r.description}"</p>
                     </div>
-                    {isUnlocked ? <div className="text-zinc-300 font-black text-[10px] tracking-[0.3em]">COLLECTED</div> : <button onClick={() => buyReward(r)} className="w-full py-5 rounded-3xl font-black text-lg bg-zinc-900 text-white active:scale-95 transition-all">Unlock {r.cost}P</button>}
+                    {isUnlocked ? <div className="text-zinc-200 font-black text-[10px] tracking-[0.3em]">COLLECTED</div> : <button onClick={() => buyReward(r)} className="w-full py-5 rounded-[2rem] font-black text-lg bg-zinc-800 text-white active:scale-95 transition-all">Unlock {r.cost}P</button>}
                   </div>
                 );
               })}
@@ -329,16 +336,16 @@ const App: React.FC = () => {
         const allUsers = Object.values(JSON.parse(localStorage.getItem('eigo_kyun_all_users') || '{}')).sort((a: any, b: any) => b.totalPoints - a.totalPoints).slice(0, 10);
         return (
           <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-900 text-center italic tracking-tighter">Hall of Fame</h2>
-            <div className="space-y-4">
+            <h2 className="text-4xl font-black text-zinc-800 text-center italic tracking-tighter">Hall of Fame</h2>
+            <div className="space-y-5">
               {allUsers.map((u: any, i) => (
-                <div key={u.id} className={`bg-white p-6 rounded-[2.5rem] flex items-center gap-6 border-2 ${u.id === user?.id ? 'border-[#FF7EB9] shadow-lg' : 'border-zinc-50 shadow-sm'}`}>
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${i===0?'bg-yellow-400 text-white':i===1?'bg-zinc-200 text-zinc-400':i===2?'bg-orange-300 text-white':'bg-zinc-50 text-zinc-200'}`}>{i+1}</div>
+                <div key={u.id} className={`bg-white p-7 rounded-[3rem] flex items-center gap-6 border-2 ${u.id === user?.id ? 'border-pink-300 shadow-xl' : 'border-zinc-50 shadow-sm'}`}>
+                  <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center font-black text-xl ${i===0?'bg-yellow-400 text-white':i===1?'bg-zinc-200 text-zinc-400':i===2?'bg-orange-300 text-white':'bg-zinc-50 text-zinc-200'}`}>{i+1}</div>
                   <div className="flex-1">
                     <p className="text-xl font-black text-zinc-700">{u.nickname}</p>
-                    <p className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">{u.loginDays} Days streak</p>
+                    <p className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">{u.loginDays} Days Streak</p>
                   </div>
-                  <p className="text-2xl font-black text-[#FF7EB9] tracking-tighter">{u.totalPoints}</p>
+                  <p className="text-2xl font-black text-pink-400 tracking-tighter">{u.totalPoints}</p>
                 </div>
               ))}
             </div>
@@ -347,20 +354,20 @@ const App: React.FC = () => {
       case 'REVIEW':
         return (
           <div className="p-8 pt-12 space-y-10 page-enter pb-32">
-            <h2 className="text-4xl font-black text-zinc-900 italic tracking-tighter text-center">My Archive</h2>
-            <div className="bg-zinc-900 p-12 rounded-[4rem] text-center shadow-2xl">
-              <p className="text-[10px] font-black text-[#FF7EB9] uppercase tracking-[0.4em] mb-4 opacity-80">Current Points</p>
+            <h2 className="text-4xl font-black text-zinc-800 italic tracking-tighter text-center">My Archive</h2>
+            <div className="bg-zinc-800 p-12 rounded-[4.5rem] text-center shadow-2xl relative overflow-hidden">
+              <p className="text-[10px] font-black text-pink-300 uppercase tracking-[0.4em] mb-4 opacity-80">Accumulated Points</p>
               <p className="text-7xl font-black text-white tracking-tighter">{user?.points}<span className="text-xs font-bold ml-2 text-zinc-500">PT</span></p>
             </div>
             <div className="space-y-4">
-              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest px-4">Latest Logs</h3>
+              <h3 className="text-[10px] font-black text-zinc-300 uppercase tracking-widest px-6">Latest Records</h3>
               {testHistory.slice(0, 5).map((h, i) => (
-                <div key={i} className="bg-white p-6 rounded-[2rem] flex justify-between items-center shadow-sm border-l-8 border-l-[#FF7EB9]">
+                <div key={i} className="bg-white p-7 rounded-[2.5rem] flex justify-between items-center shadow-sm border-l-8 border-l-pink-300">
                   <div>
                     <span className="text-[9px] font-black text-zinc-300 uppercase">{h.category}</span>
-                    <p className="text-sm font-bold text-zinc-900">{h.date}</p>
+                    <p className="text-sm font-bold text-zinc-700">{h.date}</p>
                   </div>
-                  <p className="text-3xl font-black tracking-tighter">{h.score}<span className="text-[10px] text-zinc-200">/10</span></p>
+                  <p className="text-3xl font-black tracking-tighter text-zinc-800">{h.score}<span className="text-[10px] text-zinc-200 ml-1">/10</span></p>
                 </div>
               ))}
             </div>
@@ -373,12 +380,12 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen relative bg-[#fdfaf9]">
       {currentPage !== 'LOGIN' && (
-        <header className="p-6 flex justify-between items-center sticky top-0 z-40 bg-white/60 backdrop-blur-xl border-b border-white shadow-sm">
+        <header className="p-6 flex justify-between items-center sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-white shadow-sm">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => setCurrentPage('HOME')}>
-            <div className="w-10 h-10 bg-zinc-900 rounded-2xl flex items-center justify-center text-xl shadow-lg">🐱</div>
-            <h1 className="text-[10px] font-black text-zinc-900 tracking-widest uppercase italic leading-none">Eigo★Ky!</h1>
+            <div className="w-10 h-10 bg-zinc-800 rounded-[1.2rem] flex items-center justify-center text-xl shadow-lg">🐱</div>
+            <h1 className="text-[10px] font-black text-zinc-800 tracking-widest uppercase italic leading-none">Eigo★Ky!</h1>
           </div>
-          <button onClick={() => setCurrentPage('RANKING')} className="bg-[#FF7EB9] px-6 py-2 rounded-full text-white font-black text-[9px] uppercase tracking-widest shadow-md">Ranking</button>
+          <button onClick={() => setCurrentPage('RANKING')} className="bg-pink-400 px-6 py-2 rounded-full text-white font-black text-[9px] uppercase tracking-widest shadow-md active:scale-95 transition-all">Rank</button>
         </header>
       )}
       <main className="max-w-md mx-auto">{renderContent()}</main>
@@ -387,17 +394,33 @@ const App: React.FC = () => {
         .floating-slow { animation: float-slow 4s ease-in-out infinite; }
         @keyframes float-slow {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-20px); }
+          50% { transform: translateY(-15px); }
         }
         @keyframes tail {
-          0%, 100% { transform: rotate(30deg); }
-          50% { transform: rotate(45deg); }
+          0%, 100% { transform: rotate(25deg); }
+          50% { transform: rotate(40deg); }
         }
-        .animate-tail { animation: tail 2s ease-in-out infinite; }
+        .animate-tail { animation: tail 3s ease-in-out infinite; }
         .page-enter { animation: fadeIn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
+          from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-result-pop {
+          animation: resultPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes resultPop {
+          0% { transform: scale(0.4); opacity: 0; }
+          20% { transform: scale(1.1); opacity: 1; }
+          80% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        .animate-pop-in {
+          animation: popIn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+        }
+        @keyframes popIn {
+          from { transform: scale(0.9) translateY(10px); opacity: 0; }
+          to { transform: scale(1) translateY(0); opacity: 1; }
         }
       `}</style>
     </div>
