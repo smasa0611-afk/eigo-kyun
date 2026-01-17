@@ -109,7 +109,7 @@ const App: React.FC = () => {
     if (page === 'REVIEW' && user) {
       getAIAdvice(testHistory, user.nickname).then(setAiAdvice).catch(console.error);
     }
-  }, [page]);
+  }, [page, user, testHistory]);
 
   const saveUserData = (updatedUser: UserProfile) => {
     setUser(updatedUser);
@@ -197,7 +197,7 @@ const App: React.FC = () => {
   const handleCharacterTap = async () => {
     initAudio();
     if (isSpeaking) return;
-    let pool = page === 'LOGIN' ? WELCOME_MESSAGES : KYUN_MESSAGES;
+    const pool = page === 'LOGIN' ? WELCOME_MESSAGES : KYUN_MESSAGES;
     const randomMsg = pool[Math.floor(Math.random() * pool.length)];
     if (page !== 'LOGIN') setCharacterMessage(randomMsg);
 
@@ -285,6 +285,7 @@ const App: React.FC = () => {
       setCombo(0);
       setQuizFinished(false);
       setPage(isTest ? 'TEST' : 'QUIZ');
+
       if (isTest) {
         setTimer(0);
         if (timerRef.current) clearInterval(timerRef.current);
@@ -519,8 +520,8 @@ const App: React.FC = () => {
     </div>
   );
 
-  // クイズ（最低限：4択）
-  const QuizView = (isTest: boolean) => {
+  // クイズ（最低限：4択）※ JSXで <QuizView isTest={...} /> として使えるように修正
+  const QuizView: React.FC<{ isTest: boolean }> = ({ isTest }) => {
     const q = quiz[currentQuizIndex];
     if (!q) return null;
 
@@ -703,20 +704,17 @@ const App: React.FC = () => {
 
     if (page === 'HOME') return <HomeView />;
     if (page === 'LEARN') return <LearnView />;
-    if (page === 'QUIZ') return <QuizView(false) />;
-    if (page === 'TEST') return <QuizView(true) />;
+    if (page === 'QUIZ') return <QuizView isTest={false} />;
+    if (page === 'TEST') return <QuizView isTest={true} />;
     if (page === 'REVIEW') return <ReviewView />;
 
     return <HomeView />;
   };
 
   return (
-    <div>
-      <Navigation
-        page={page}
-        onNavigate={(p: AppState) => setPage(p)}
-      />
+    <div style={{ paddingBottom: 80 }}>
       <Main />
+      <Navigation current={page} setPage={setPage} />
     </div>
   );
 };
