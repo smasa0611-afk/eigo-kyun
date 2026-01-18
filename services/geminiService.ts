@@ -2,27 +2,33 @@
 import { WordCard, QuizQuestion, StudyMode } from "../types";
 
 export const speakMessage = (text: string): void => {
-  if (!window.speechSynthesis) return;
-  
-  // スマホ対策1: 進行中の音声を即座に停止してリセット
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+  // 重要：iOS等のスマホ対策。現在再生中のものを即時キャンセル
   window.speechSynthesis.cancel();
-  
-  // スマホ対策2: わずかな遅延を入れることで、SpeechSynthesisの状態遷移を安定させる
+
+  // ほんの少しだけ遅延させることで、スマホブラウザが「新しい発話」として認識しやすくなる
   setTimeout(() => {
     const uttr = new SpeechSynthesisUtterance(text);
     const isEnglish = /^[A-Za-z\s,!?.]+$/.test(text);
     uttr.lang = isEnglish ? 'en-US' : 'ja-JP';
-    uttr.rate = 0.9;
-    uttr.pitch = 1.1; 
-    
-    // スマホ対策3: 再生直前にブラウザへ「ユーザー操作による実行」であることを再認識させる
+    uttr.rate = 0.95;
+    uttr.pitch = 1.0;
+
+    // ボイスの読み込みを待機（iOS/Safari対策）
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      const targetVoice = voices.find(v => v.lang.startsWith(isEnglish ? 'en' : 'ja'));
+      if (targetVoice) uttr.voice = targetVoice;
+    }
+
     window.speechSynthesis.speak(uttr);
   }, 50);
 };
 
 export const initAudio = () => {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    // 空の音声を流すことで、ブラウザの音声再生禁止制限（Autoplay Policy）を解除する
+    // 最初のユーザー操作（ログインボタン等）で空の発話を行いロックを解除する
     window.speechSynthesis.cancel();
     const dummy = new SpeechSynthesisUtterance("");
     dummy.volume = 0;
